@@ -14,6 +14,7 @@ export default function BuildPage() {
 
   const [post, setPost] = useState(null);
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [comments, setComments] = useState([]);
   const [content, setContent] = useState("");
   const [replyTo, setReplyTo] = useState(null);
@@ -107,8 +108,8 @@ if (error) {
       {
         post_id: id,
         user_id: user.id,
-        author: user.email,
-        author_email: user.email,
+     author: profile?.username ? `@${profile.username}` : user.email,
+author_email: user.email,
         content,
         parent_id: null,
       },
@@ -238,6 +239,15 @@ if (error) {
 
       const currentUser = session?.user || null;
       setUser(currentUser);
+      if (currentUser) {
+  const { data: profileData } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", currentUser.id)
+    .single();
+
+  setProfile(profileData);
+}
       loadRatings(currentUser);
 
       if (currentUser) {
