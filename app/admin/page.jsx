@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-const [user, setUser] = useState(null);
-const [isAdmin, setIsAdmin] = useState(false);
 
 const supabase = createClient(
   "https://gfufidjjiyroagmsreeg.supabase.co",
@@ -11,8 +9,12 @@ const supabase = createClient(
 );
 
 export default function AdminPage() {
+  const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+
+}
 
   async function loadPosts() {
 const { data, error } = await supabase
