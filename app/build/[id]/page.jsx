@@ -359,7 +359,7 @@ if (error) {
             </div>
 
            <a
-  href={`/garage/${post.owner?.replace("@", "")}`}
+href={`/garage/${post.owner?.replace("@", "").trim()}`}
   className="block text-center bg-orange-500 text-black font-black uppercase py-4 rounded-2xl hover:bg-white transition text-sm md:text-base"
 >
   View Garage

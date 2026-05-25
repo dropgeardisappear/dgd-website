@@ -103,7 +103,9 @@ export default function SubmitPage() {
       {
         user_id: user.id,
         title,
-        owner,
+  owner: profile?.username
+  ? `@${profile.username}`
+  : user.email,
         vehicle,
         vehicle_type: vehicleType,
         image_url: uploadedUrls[0],
@@ -182,12 +184,12 @@ export default function SubmitPage() {
         >
           <FormSection title="Build Basics">
             <div className="grid md:grid-cols-2 gap-4">
-              <input
-                className={inputClass}
-                placeholder="Build Name"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
+           <input
+  className={`${inputClass} opacity-60 cursor-not-allowed`}
+  placeholder="@Username"
+  value={owner}
+  disabled
+/>
 
               <input
                 className={inputClass}
