@@ -62,8 +62,7 @@ export default function SubmitPage() {
       window.location.href = "/login";
       return;
     }
-
-    if (!title || !owner || !vehicle || !vehicleType || !category || !description) {
+if (!title || !vehicle || !vehicleType || !category || !description) {
       alert("Please fill out all required fields.");
       return;
     }
@@ -182,82 +181,83 @@ export default function SubmitPage() {
           onSubmit={handleSubmit}
           className="bg-zinc-950 border border-white/10 rounded-3xl p-5 md:p-8 space-y-8"
         >
-          <FormSection title="Build Basics">
-            <div className="grid md:grid-cols-2 gap-4">
-           <input
-  className={`${inputClass} opacity-60 cursor-not-allowed`}
-  placeholder="@Username"
-  value={owner}
-  disabled
+<FormSection title="Build Basics">
+  <div className="grid md:grid-cols-2 gap-4">
+    <input
+      className={inputClass}
+      placeholder="Build Name"
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
+    />
+
+    <input
+      className={`${inputClass} opacity-60 cursor-not-allowed`}
+      placeholder="@Username"
+      value={owner}
+      disabled
+    />
+  </div>
+
+  <input
+    className={inputClass}
+    placeholder="Vehicle, ex: 1999 BMW E36 / 2008 Silverado"
+    value={vehicle}
+    onChange={(e) => setVehicle(e.target.value)}
+  />
+
+  <div className="grid md:grid-cols-2 gap-4">
+    <select
+      className={inputClass}
+      value={vehicleType}
+      onChange={(e) => {
+        setVehicleType(e.target.value);
+        setCategory("");
+      }}
+    >
+      <option value="">Select Vehicle Type</option>
+      <option value="Car">Car</option>
+      <option value="Truck">Truck</option>
+    </select>
+
+    <select
+      className={inputClass}
+      value={category}
+      onChange={(e) => setCategory(e.target.value)}
+    >
+      <option value="">Select Category</option>
+
+      {vehicleType === "Car" && (
+        <>
+          <option value="Drift">Drift</option>
+          <option value="Static">Static</option>
+          <option value="Track">Track</option>
+          <option value="Drag">Drag</option>
+          <option value="OEM+">OEM+</option>
+          <option value="Offroad">Offroad</option>
+        </>
+      )}
+
+      {vehicleType === "Truck" && (
+        <>
+          <option value="Prerunner">Prerunner</option>
+          <option value="Lifted">Lifted</option>
+          <option value="Work/Tow">Work/Tow</option>
+          <option value="Street">Street</option>
+          <option value="Drag">Drag</option>
+          <option value="OEM+">OEM+</option>
+        </>
+      )}
+    </select>
+  </div>
+
+<textarea
+  className={`${inputClass} h-40 resize-none`}
+  placeholder="Full Build Description"
+  value={description}
+  onChange={(e) => setDescription(e.target.value)}
 />
-
-              <input
-                className={inputClass}
-                placeholder="@Username"
-                value={owner}
-                onChange={(e) => setOwner(e.target.value)}
-              />
-            </div>
-
-            <input
-              className={inputClass}
-              placeholder="Vehicle, ex: 1999 BMW E36 / 2008 Silverado"
-              value={vehicle}
-              onChange={(e) => setVehicle(e.target.value)}
-            />
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <select
-                className={inputClass}
-                value={vehicleType}
-                onChange={(e) => {
-                  setVehicleType(e.target.value);
-                  setCategory("");
-                }}
-              >
-                <option value="">Select Vehicle Type</option>
-                <option value="Car">Car</option>
-                <option value="Truck">Truck</option>
-              </select>
-
-              <select
-                className={inputClass}
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                <option value="">Select Category</option>
-
-                {vehicleType === "Car" && (
-                  <>
-                    <option value="Drift">Drift</option>
-                    <option value="Static">Static</option>
-                    <option value="Track">Track</option>
-                    <option value="Drag">Drag</option>
-                    <option value="OEM+">OEM+</option>
-                    <option value="Offroad">Offroad</option>
-                  </>
-                )}
-
-                {vehicleType === "Truck" && (
-                  <>
-                    <option value="Prerunner">Prerunner</option>
-                    <option value="Lifted">Lifted</option>
-                    <option value="Work/Tow">Work/Tow</option>
-                    <option value="Street">Street</option>
-                    <option value="Drag">Drag</option>
-                    <option value="OEM+">OEM+</option>
-                  </>
-                )}
-              </select>
-            </div>
-
-            <textarea
-              className={`${inputClass} h-40 resize-none`}
-              placeholder="Full Build Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </FormSection>
+</FormSection>
+  
 
           <FormSection title="Photos">
             <div className="bg-black border border-white/10 rounded-2xl p-5 md:p-6">
