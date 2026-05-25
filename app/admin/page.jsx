@@ -14,19 +14,21 @@ export default function AdminPage() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-}
-
   async function loadPosts() {
-const { data, error } = await supabase
-  .from("posts")
-  .select("*")
-  .eq("status", "pending");
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
 
     if (error) {
       console.log(error);
-    } else {
-      setPosts(data || []);
+      setLoading(false);
+      return;
     }
+
+    setPosts(data || []);
+    setLoading(false);
   }
 
   async function approvePost(id) {
@@ -36,154 +38,143 @@ const { data, error } = await supabase
       .eq("id", id);
 
     if (error) {
-      console.log(error);
-      alert("Error approving post");
-    } else {
-      alert("Post approved");
-      loadPosts();
+      alert(error.message);
+      return;
     }
+
+    setPosts((items) => items.filter((item) => item.id !== id));
   }
 
   async function rejectPost(id) {
-    const reason = prompt("Why are you rejecting this post?");
+    const confirmDelete = confirm("Reject and delete this build?");
 
-    const { error } = await supabase
-      .from("posts")
-      .update({
-        status: "rejected",
-        rejection_reason: reason || "No reason provided",
-      })
-      .eq("id", id);
-
-    if (error) {
-      console.log(error);
-      alert("Error rejecting post");
-    } else {
-      alert("Post rejected");
-      loadPosts();
-    }
-  }
-
-  async function deletePost(id) {
-    const confirmDelete = confirm("Are you sure you want to delete this post?");
     if (!confirmDelete) return;
 
-    const { error } = await supabase
-      .from("posts")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("posts").delete().eq("id", id);
 
     if (error) {
-      console.log(error);
-      alert("Error deleting post");
-    } else {
-      alert("Post deleted");
+      alert(error.message);
+      return;
+    }
+
+    setPosts((items) => items.filter((item) => item.id !== id));
+  }
+
+  useEffect(() => {
+    async function checkAdmin() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        window.location.href = "/login";
+        return;
+      }
+
+      setUser(session.user);
+
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", session.user.id)
+        .single();
+
+      if (error || !profile?.is_admin) {
+        alert("Admin access only.");
+        window.location.href = "/";
+        return;
+      }
+
+      setIsAdmin(true);
       loadPosts();
     }
+
+    checkAdmin();
+  }, []);
+
+  if (!isAdmin) {
+    return (
+      <main className="bg-black text-white min-h-screen flex items-center justify-center">
+        Checking admin access...
+      </main>
+    );
   }
 
-useEffect(() => {
-  async function checkAdmin() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      window.location.href = "/login";
-      return;
-    }
-
-    setUser(session.user);
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", session.user.id)
-      .single();
-
-    if (!profile?.is_admin) {
-      alert("Admin access only.");
-      window.location.href = "/";
-      return;
-    }
-
-    setIsAdmin(true);
-    loadPendingPosts();
+  if (loading) {
+    return (
+      <main className="bg-black text-white min-h-screen flex items-center justify-center">
+        Loading...
+      </main>
+    );
   }
 
-  checkAdmin();
-}, []);
-
-if (!isAdmin) {
   return (
-    <div className="bg-black text-white min-h-screen flex items-center justify-center">
-      Checking admin access...
-    </div>
-  );
-}
+    <main className="bg-black text-white min-h-screen px-6 py-20">
+      <div className="max-w-6xl mx-auto">
+        <a href="/" className="text-gray-400 hover:text-white">
+          ← Back Home
+        </a>
 
-if (loading) {
-  return (
-    <div className="bg-black text-white min-h-screen flex items-center justify-center">
-      Loading...
-    </div>
-  );
-}
+        <h1 className="text-5xl md:text-7xl font-black mt-8 mb-6">
+          ADMIN APPROVAL
+        </h1>
 
-return (
-    <div className="bg-black text-white min-h-screen p-10">
-      <h1 className="text-5xl font-black mb-10">ADMIN APPROVAL</h1>
-      <p className="text-gray-500 mb-6">
-  Pending posts found: {posts.length}
-</p>
+        <p className="text-gray-400 mb-10">
+          Pending posts found: {posts.length}
+        </p>
 
-      <div className="space-y-6">
-        {posts.map((post) => (
-          <div
-            key={post.id}
-            className="border border-white/10 rounded-2xl p-6 bg-zinc-950"
-          >
-            <img
-              src={post.image_url}
-              alt={post.title}
-              className="w-full h-64 object-cover rounded-2xl mb-4"
-            />
-
-            <h2 className="text-2xl font-black mb-2">{post.title}</h2>
-
-            <p className="text-gray-400">{post.owner}</p>
-            <p className="text-gray-400">{post.vehicle}</p>
-            <p className="text-gray-400">{post.category}</p>
-
-            <p className="text-gray-400 mt-4">Engine: {post.engine}</p>
-            <p className="text-gray-400">Suspension: {post.suspension}</p>
-            <p className="text-gray-400">Wheels: {post.wheels}</p>
-            <p className="text-gray-400">Description: {post.description}</p>
-
-            <div className="flex gap-4 mt-6">
-              <button
-                onClick={() => approvePost(post.id)}
-                className="bg-white text-black px-6 py-3 rounded-xl font-black"
-              >
-                Approve
-              </button>
-
-              <button
-                onClick={() => rejectPost(post.id)}
-                className="bg-yellow-500 text-black px-6 py-3 rounded-xl font-black"
-              >
-                Reject
-              </button>
-
-              <button
-                onClick={() => deletePost(post.id)}
-                className="bg-red-600 text-white px-6 py-3 rounded-xl uppercase font-black"
-              >
-                Delete
-              </button>
-            </div>
+        {posts.length === 0 ? (
+          <div className="bg-zinc-950 border border-white/10 rounded-3xl p-10 text-gray-400">
+            No pending builds.
           </div>
-        ))}
+        ) : (
+          <div className="grid md:grid-cols-2 gap-6">
+            {posts.map((post) => (
+              <div
+                key={post.id}
+                className="bg-zinc-950 border border-white/10 rounded-3xl overflow-hidden"
+              >
+                <img
+                  src={post.image_url}
+                  alt={post.title}
+                  className="w-full h-72 object-cover"
+                />
+
+                <div className="p-6">
+                  <p className="text-orange-500 uppercase text-sm mb-2">
+                    {post.category}
+                  </p>
+
+                  <h2 className="text-3xl font-black mb-2">{post.title}</h2>
+
+                  <p className="text-gray-400 mb-2">{post.vehicle}</p>
+                  <p className="text-gray-500 mb-6">{post.owner}</p>
+
+                  <p className="text-gray-300 mb-6">
+                    {post.description}
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => approvePost(post.id)}
+                      className="bg-orange-500 text-black font-black uppercase py-4 rounded-xl hover:bg-white transition"
+                    >
+                      Approve
+                    </button>
+
+                    <button
+                      onClick={() => rejectPost(post.id)}
+                      className="border border-red-500 text-red-400 font-black uppercase py-4 rounded-xl hover:bg-red-500 hover:text-white transition"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+    </main>
   );
+}
