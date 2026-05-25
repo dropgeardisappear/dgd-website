@@ -115,7 +115,12 @@ export default function AccountPage() {
       bannerUrl = data.publicUrl;
     }
 
-    const cleanUsername = username.replace("@", "").trim();
+  const cleanUsername = username
+  .replace("@", "")
+  .toLowerCase()
+  .replace(/\s+/g, "")
+  .replace(/[^a-z0-9_]/g, "")
+  .trim();
 
     const { error } = await supabase.from("profiles").upsert([
       {
