@@ -122,15 +122,15 @@ if (!isAdmin) {
   );
 }
 
-  if (loading) {
-    return (
-      <div className="bg-black text-white min-h-screen flex items-center justify-center">
-        Loading...
-      </div>
-    );
-  }
-
+if (loading) {
   return (
+    <div className="bg-black text-white min-h-screen flex items-center justify-center">
+      Loading...
+    </div>
+  );
+}
+
+return (
     <div className="bg-black text-white min-h-screen p-10">
       <h1 className="text-5xl font-black mb-10">ADMIN APPROVAL</h1>
       <p className="text-gray-500 mb-6">
@@ -187,4 +187,3 @@ if (!isAdmin) {
       </div>
     </div>
   );
-}
