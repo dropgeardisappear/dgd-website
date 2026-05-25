@@ -133,7 +133,9 @@ export default function HomePage() {
       <section
         className="relative min-h-screen bg-cover bg-center flex items-center pt-24 pb-12"
         style={{
-       backgroundImage: "url('/dgd-hero.png')",
+          backgroundImage: `url('${
+            featuredPost?.image_url || "/dgd-hero.png"
+          }')`,
         }}
       >
         <div className="absolute inset-0 bg-black/75" />
