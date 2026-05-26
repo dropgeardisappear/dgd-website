@@ -229,8 +229,7 @@ if (!title || !vehicle || !vehicleType || !category || !description) {
       {vehicleType === "Car" && (
         <>
           <option value="Drift">Drift</option>
-          <option value="Static">Static</option>
-          <option value="Track">Track</option>
+<option value="Stanced">Stanced</option>          <option value="Track">Track</option>
           <option value="Drag">Drag</option>
           <option value="OEM+">OEM+</option>
           <option value="Offroad">Offroad</option>
