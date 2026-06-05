@@ -1,645 +1,601 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  "https://gfufidjjiyroagmsreeg.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdWZpZGpqaXlyb2FnbXNyZWVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MTE2MzQsImV4cCI6MjA5NDI4NzYzNH0.PlczG3eNWaajNqFykoeijDAB_k_kPxTk1gjxR7DGAOE"
-);
-
+import Link from "next/link";
+import { supabase } from "../../../lib/supabase";
 export default function BuildPage() {
   const { id } = useParams();
 
-  const [post, setPost] = useState(null);
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
+  const [build, setBuild] = useState(null);
+  const [similarBuilds, setSimilarBuilds] = useState([]);
   const [comments, setComments] = useState([]);
-  const [content, setContent] = useState("");
-  const [replyTo, setReplyTo] = useState(null);
-  const [replyContent, setReplyContent] = useState("");
-  const [likes, setLikes] = useState(0);
-  const [views, setViews] = useState(0);
-  const [liked, setLiked] = useState(false);
-  const [favorited, setFavorited] = useState(false);
-  const [averageRating, setAverageRating] = useState(0);
-  const [ratingCount, setRatingCount] = useState(0);
-  const [userRating, setUserRating] = useState(null);
-  const [selectedRating, setSelectedRating] = useState(0);
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [reportReason, setReportReason] = useState("");
-  const [reportDetails, setReportDetails] = useState("");
+  const [ratings, setRatings] = useState([]);
+  const [user, setUser] = useState(null);
 
-  async function loadComments() {
-    const { data, error } = await supabase
+  const [activeMedia, setActiveMedia] = useState(null);
+  const [myRating, setMyRating] = useState(0);
+  const [commentText, setCommentText] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (id) loadBuildPage();
+  }, [id]);
+
+  async function loadBuildPage() {
+    setLoading(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    setUser(user);
+
+    const { data: post, error: postError } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (postError || !post) {
+      setBuild(null);
+      setLoading(false);
+      return;
+    }
+
+    setBuild(post);
+    setActiveMedia(post.video_url || post.image_url || null);
+
+    await supabase
+      .from("posts")
+      .update({ views: (post.views || 0) + 1 })
+      .eq("id", id);
+
+    const { data: commentData } = await supabase
       .from("comments")
       .select("*")
       .eq("post_id", id)
       .order("created_at", { ascending: false });
 
-    if (!error) setComments(data || []);
-  }
-
-  async function loadRatings(currentUser) {
-    const { data } = await supabase.from("ratings").select("*").eq("post_id", id);
-    const ratings = data || [];
-    const total = ratings.reduce((sum, item) => sum + item.rating, 0);
-    const avg = ratings.length ? total / ratings.length : 0;
-
-    setAverageRating(avg);
-    setRatingCount(ratings.length);
-
-    if (currentUser) {
-      const existing = ratings.find((item) => item.user_id === currentUser.id);
-      setUserRating(existing?.rating || null);
-    }
-  }
-
-  async function submitRating(ratingValue) {
-    if (!user) {
-      window.location.href = "/login";
-      return;
-    }
-
-    if (!ratingValue) {
-      alert("Please select a rating first.");
-      return;
-    }
-
-    const { error } = await supabase.from("ratings").insert([
-      { post_id: id, user_id: user.id, rating: ratingValue },
-    ]);
-
-if (error) {
-  console.log(error);
-  alert(error.message);
-  return;
-}
-    const { data: allRatings } = await supabase
+    const { data: ratingData } = await supabase
       .from("ratings")
       .select("*")
       .eq("post_id", id);
 
-    const total = allRatings.reduce((sum, item) => sum + item.rating, 0);
-    const avg = total / allRatings.length;
-
-    await supabase
+    const { data: similarData } = await supabase
       .from("posts")
-      .update({ average_rating: avg, rating_count: allRatings.length })
-      .eq("id", id);
+      .select("*")
+      .eq("status", "approved")
+      .eq("category", post.category)
+      .neq("id", id)
+      .limit(3);
 
-    setUserRating(ratingValue);
-    setAverageRating(avg);
-    setRatingCount(allRatings.length);
+    setComments(commentData || []);
+    setRatings(ratingData || []);
+    setSimilarBuilds(similarData || []);
+
+    if (user && ratingData?.length) {
+      const mine = ratingData.find((item) => item.user_id === user.id);
+      setMyRating(mine?.rating || 0);
+    }
+
+    setLoading(false);
   }
 
-  async function submitComment(e) {
-    e.preventDefault();
+  const averageRating = useMemo(() => {
+    if (!ratings.length) return 0;
+    const total = ratings.reduce((sum, item) => sum + Number(item.rating), 0);
+    return total / ratings.length;
+  }, [ratings]);
 
-    if (!user) {
-      window.location.href = "/login";
-      return;
-    }
+const mediaItems = useMemo(() => {
+  if (!build) return [];
 
-    if (!content.trim()) return;
+  const items = [];
 
-    const { error } = await supabase.from("comments").insert([
-      {
-        post_id: id,
-        user_id: user.id,
-     author: profile?.username ? `@${profile.username}` : user.email,
-author_email: user.email,
-        content,
-        parent_id: null,
-      },
-    ]);
-
-    if (error) {
-      alert("Error posting comment");
-      return;
-    }
-
-    if (post.user_id && post.user_id !== user.id) {
-      await supabase.from("notifications").insert([
-        {
-          user_id: post.user_id,
-          post_id: id,
-          type: "comment",
-          message: `${user.email} commented on your build: ${post.title}`,
-          is_read: false,
-        },
-      ]);
-    }
-
-    setContent("");
-    loadComments();
+  if (build.video_url) {
+    items.push({ type: "video", url: build.video_url, label: "Walkaround" });
   }
 
-  async function submitReply(commentId) {
-    if (!user) {
-      window.location.href = "/login";
-      return;
-    }
-
-    if (!replyContent.trim()) return;
-
-    const { error } = await supabase.from("comments").insert([
-      {
-        post_id: id,
-        user_id: user.id,
-        author: user.email,
-        author_email: user.email,
-        content: replyContent,
-        parent_id: commentId,
-      },
-    ]);
-
-    if (error) {
-      alert("Error posting reply");
-      return;
-    }
-
-    setReplyTo(null);
-    setReplyContent("");
-    loadComments();
+  if (build.image_url) {
+    items.push({ type: "image", url: build.image_url, label: "Main Photo" });
   }
 
-  async function handleLike() {
-    const likedKey = `liked-${id}`;
-    const newLikes = liked ? likes - 1 : likes + 1;
+  const photos = build.gallery_images || build.gallery || [];
 
-    setLikes(newLikes);
-    setLiked(!liked);
-
-    if (liked) localStorage.removeItem(likedKey);
-    else localStorage.setItem(likedKey, "true");
-
-    await supabase.from("posts").update({ likes: newLikes }).eq("id", id);
-  }
-
-  async function toggleFavorite() {
-    if (!user) {
-      window.location.href = "/login";
-      return;
-    }
-
-    if (favorited) {
-      await supabase.from("favorites").delete().eq("user_id", user.id).eq("post_id", id);
-      setFavorited(false);
-    } else {
-      await supabase.from("favorites").insert([{ user_id: user.id, post_id: id }]);
-      setFavorited(true);
-    }
-  }
-
-  async function submitReport(e) {
-    e.preventDefault();
-
-    if (!reportReason) {
-      alert("Please choose a reason");
-      return;
-    }
-
-    const { error } = await supabase.from("reports").insert([
-      {
-        post_id: id,
-        user_id: user?.id || null,
-        reason: reportReason,
-        details: reportDetails,
-        status: "pending",
-      },
-    ]);
-
-    if (error) {
-      alert("Error submitting report");
-      return;
-    }
-
-    alert("Report submitted. Thank you.");
-    setReportReason("");
-    setReportDetails("");
-  }
-
-  function formatDate(date) {
-    if (!date) return "";
-    return new Date(date).toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+  if (Array.isArray(photos)) {
+    photos.forEach((url, index) => {
+      if (url && !items.some((item) => item.url === url)) {
+        items.push({
+          type: isVideo(url) ? "video" : "image",
+          url,
+          label: `Photo ${index + 1}`,
+        });
+      }
     });
   }
 
-  useEffect(() => {
-    async function checkUser() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+  const videos = build.videos || [];
 
-      const currentUser = session?.user || null;
-      setUser(currentUser);
-      if (currentUser) {
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", currentUser.id)
-    .single();
-
-  setProfile(profileData);
-}
-      loadRatings(currentUser);
-
-      if (currentUser) {
-        const { data: fav } = await supabase
-          .from("favorites")
-          .select("*")
-          .eq("user_id", currentUser.id)
-          .eq("post_id", id)
-          .maybeSingle();
-
-        setFavorited(!!fav);
+  if (Array.isArray(videos)) {
+    videos.forEach((url, index) => {
+      if (url && !items.some((item) => item.url === url)) {
+        items.push({
+          type: "video",
+          url,
+          label: `Video ${index + 1}`,
+        });
       }
+    });
+  }
+
+  return items;
+}, [build]);
+
+  function isVideo(url) {
+    return /\.(mp4|mov|webm|m4v)$/i.test(url || "");
+  }
+
+  async function handleLike() {
+    if (!user) {
+      alert("Sign in to like this build.");
+      return;
     }
 
-    async function loadPost() {
-      const { data, error } = await supabase.from("posts").select("*").eq("id", id).single();
+    const newLikes = (build.likes || 0) + 1;
 
-      if (!error && data) {
-        setPost(data);
-        setLikes(data.likes || 0);
-        setViews((data.views || 0) + 1);
-        setAverageRating(data.average_rating || 0);
-        setRatingCount(data.rating_count || 0);
-        setLiked(localStorage.getItem(`liked-${id}`) === "true");
+    const { error } = await supabase
+      .from("posts")
+      .update({ likes: newLikes })
+      .eq("id", id);
 
-        await supabase.from("posts").update({ views: (data.views || 0) + 1 }).eq("id", id);
+    if (!error) {
+      setBuild({ ...build, likes: newLikes });
+    }
+  }
+
+  async function handleRating(value) {
+    if (!user) {
+      alert("Sign in to rate this build.");
+      return;
+    }
+
+    setMyRating(value);
+
+    await supabase.from("ratings").upsert(
+      {
+        post_id: id,
+        user_id: user.id,
+        rating: value,
+      },
+      {
+        onConflict: "post_id,user_id",
       }
+    );
+
+    loadBuildPage();
+  }
+
+  async function handleComment(e) {
+    e.preventDefault();
+
+    if (!user) {
+      alert("Sign in to comment.");
+      return;
     }
 
-    if (id) {
-      checkUser();
-      loadPost();
-      loadComments();
-    }
-  }, [id]);
+    if (!commentText.trim()) return;
 
-  if (!post) {
+    const { error } = await supabase.from("comments").insert({
+      post_id: id,
+      user_id: user.id,
+      content: commentText.trim(),
+    });
+
+    if (!error) {
+      setCommentText("");
+      loadBuildPage();
+    }
+  }
+
+  function handleShare() {
+    navigator.clipboard.writeText(window.location.href);
+    alert("Build link copied.");
+  }
+
+  if (loading) {
     return (
-      <div className="bg-black text-white min-h-screen flex items-center justify-center px-4">
-        Loading build...
-      </div>
+      <main className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-zinc-500">Loading build...</p>
+      </main>
     );
   }
 
-  const galleryImages =
-    post.gallery_images && post.gallery_images.length > 0
-      ? post.gallery_images
-      : [post.image_url];
-
-  const mainComments = comments.filter((comment) => !comment.parent_id);
+  if (!build) {
+    return (
+      <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-4">
+        <h1 className="text-3xl font-black">Build not found</h1>
+        <Link href="/" className="text-red-500 underline">
+          Go back home
+        </Link>
+      </main>
+    );
+  }
 
   return (
-    <main className="bg-black text-white min-h-screen overflow-x-hidden">
-      <section
-        className="relative min-h-[65vh] md:min-h-[75vh] bg-cover bg-center flex items-end"
-        style={{ backgroundImage: `url(${post.image_url})` }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/20" />
-
-        <div className="relative z-10 max-w-6xl mx-auto px-4 md:px-6 pb-10 md:pb-16 w-full">
-          <a href="/" className="inline-block mb-6 border border-white/20 px-4 py-2 rounded-xl text-xs uppercase hover:bg-white hover:text-black transition">
-            ← Back Home
-          </a>
-
-          <p className="uppercase tracking-[0.25em] text-orange-500 font-bold mb-4 text-xs md:text-sm">
-            Featured Build
-          </p>
-
-          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black mb-4 leading-none">
-            {post.title}
-          </h1>
-
-          <p className="text-base md:text-xl text-gray-300">
-            {post.vehicle} • {post.category}
-          </p>
+    <main className="min-h-screen bg-black text-white pb-28 md:pb-10">
+      {/* HERO */}
+      <section className="relative border-b border-zinc-900">
+        <div className="absolute inset-0 opacity-30">
+          {activeMedia && isVideo(activeMedia) ? (
+            <video src={activeMedia} autoPlay muted loop className="w-full h-full object-cover" />
+          ) : (
+            <img src={activeMedia || build.image_url} alt="" className="w-full h-full object-cover" />
+          )}
         </div>
-      </section>
 
-      <section className="max-w-6xl mx-auto px-4 md:px-6 py-10 md:py-16 grid lg:grid-cols-3 gap-6 md:gap-8">
-        <div className="lg:col-span-2 space-y-6 md:space-y-8">
-          <Card title="Build Story">
-            <p className="text-gray-300 leading-7 md:leading-8 text-sm md:text-base">
-              {post.description || "No build description added yet."}
-            </p>
-          </Card>
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/80 to-black" />
 
-          <Card title="Gallery">
-            <div className="grid sm:grid-cols-2 gap-4">
-              {galleryImages.map((image, index) => (
+        <div className="relative max-w-7xl mx-auto px-5 py-8">
+          <Link href="/" className="text-sm text-zinc-400 hover:text-white">
+            ← Back to builds
+          </Link>
+
+          <div className="grid lg:grid-cols-[1.25fr_0.75fr] gap-8 mt-8 items-end">
+            <div className="rounded-3xl overflow-hidden border border-zinc-800 bg-black shadow-2xl">
+              {activeMedia && isVideo(activeMedia) ? (
+                <video src={activeMedia} controls className="w-full max-h-[650px] object-contain bg-black" />
+              ) : (
                 <img
-                  key={index}
-                  src={image}
-                  alt={`${post.title} photo ${index + 1}`}
-                  onClick={() => setSelectedImage(image)}
-                  className="w-full h-56 sm:h-64 md:h-72 object-cover rounded-2xl border border-white/10 cursor-pointer hover:scale-[1.02] transition"
+                  src={activeMedia || build.image_url}
+                  alt={build.title}
+                  className="w-full max-h-[650px] object-cover"
                 />
-              ))}
+              )}
             </div>
-          </Card>
 
-          <div className="grid sm:grid-cols-3 gap-4 md:gap-5">
-            <SpecCard label="Engine" value={post.engine} />
-            <SpecCard label="Suspension" value={post.suspension} />
-            <SpecCard label="Wheels" value={post.wheels} />
-          </div>
-        </div>
-
-        <aside className="space-y-6 md:space-y-8">
-          <Panel>
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-orange-500 flex items-center justify-center text-xl md:text-2xl font-black text-black">
-                {post.owner?.charAt(0)}
+            <div className="bg-black/70 backdrop-blur border border-zinc-800 rounded-3xl p-6">
+              <div className="flex flex-wrap gap-2">
+                <span className="bg-red-600 text-white text-xs font-black uppercase px-3 py-1 rounded-full">
+                  {build.category || "Build"}
+                </span>
+                <span className="bg-zinc-900 text-zinc-300 text-xs font-bold uppercase px-3 py-1 rounded-full">
+                  DGD Featured
+                </span>
               </div>
 
-              <div className="min-w-0">
-                <h2 className="text-xl md:text-2xl font-black truncate">{post.owner}</h2>
-                <p className="text-gray-500 text-xs md:text-sm uppercase">Garage Owner</p>
-              </div>
-            </div>
+              <h1 className="text-4xl md:text-6xl font-black mt-4 leading-none">
+                {build.title}
+              </h1>
 
-           <a
-href={`/garage/${post.owner?.replace("@", "").trim()}`}
-  className="block text-center bg-orange-500 text-black font-black uppercase py-4 rounded-2xl hover:bg-white transition text-sm md:text-base"
->
-  View Garage
-</a>
-{user?.id === post.user_id && (
-  <div className="mt-4 space-y-3">
-    <a
-      href={`/build/${post.id}/edit`}
-      className="block text-center border border-white/20 text-white font-black uppercase py-4 rounded-2xl hover:bg-white hover:text-black transition text-sm md:text-base"
-    >
-      Edit Build
-    </a>
-
-    <button
-      onClick={async () => {
-        const confirmDelete = confirm("Delete this build? This cannot be undone.");
-        if (!confirmDelete) return;
-
-        const { error } = await supabase
-          .from("posts")
-          .delete()
-          .eq("id", post.id)
-          .eq("user_id", user.id);
-
-        if (error) {
-          alert(error.message);
-          return;
-        }
-
-        alert("Build deleted.");
-        window.location.href = "/";
-      }}
-      className="w-full border border-red-500 text-red-400 font-black uppercase py-4 rounded-2xl hover:bg-red-500 hover:text-white transition text-sm md:text-base"
-    >
-      Delete Build
-    </button>
-  </div>
-)}
-          </Panel>
-
-          <Panel>
-            <h2 className="text-2xl md:text-3xl font-black mb-6">Build Stats</h2>
-
-            <div className="grid grid-cols-2 gap-3 md:gap-4 mb-6">
-              <Stat label="Views" value={views} />
-              <Stat label="Likes" value={likes} />
-            </div>
-
-            <button onClick={handleLike} className="w-full bg-orange-500 text-black font-black uppercase py-4 rounded-2xl hover:bg-white transition text-sm md:text-base">
-              {liked ? "💔 Remove Like" : "❤️ Like This Build"}
-            </button>
-
-            <button onClick={toggleFavorite} className="mt-4 w-full border border-white/20 text-white font-black uppercase py-4 rounded-2xl hover:bg-white hover:text-black transition text-sm md:text-base">
-              {favorited ? "★ Favorited" : "☆ Add Favorite"}
-            </button>
-          </Panel>
-
-          <Panel>
-            <h2 className="text-2xl md:text-3xl font-black mb-5">Rate This Build</h2>
-
-            <p className="text-5xl font-black text-orange-500">
-              {Number(averageRating).toFixed(1)}
-            </p>
-
-            <p className="text-gray-500 uppercase text-sm mb-5">
-              {ratingCount} ratings
-            </p>
-
-            <div className="flex gap-2 text-3xl md:text-4xl mb-4">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  onClick={() => setSelectedRating(star)}
-                  disabled={!!userRating}
-                  className={`transition ${
-                    star <= (selectedRating || userRating || 0)
-                      ? "text-orange-500"
-                      : "text-gray-600 hover:text-orange-500"
-                  } ${userRating ? "cursor-not-allowed" : ""}`}
-                >
-                  ★
-                </button>
-              ))}
-            </div>
-
-            {userRating ? (
-              <p className="text-orange-500 text-sm">You rated this build {userRating}/5.</p>
-            ) : (
-              <>
-                <p className="text-gray-500 text-sm mb-4">
-                  Select 1–5 stars, then submit your rating.
-                </p>
-
-                <button
-                  onClick={() => submitRating(selectedRating)}
-                  disabled={!selectedRating}
-                  className="w-full bg-orange-500 text-black font-black uppercase py-4 rounded-2xl hover:bg-white transition disabled:opacity-40"
-                >
-                  Submit Rating
-                </button>
-              </>
-            )}
-          </Panel>
-        </aside>
-      </section>
-
-      <section className="max-w-6xl mx-auto px-4 md:px-6 pb-10 md:pb-12">
-        <Card title="Comments">
-          {!user ? (
-            <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-5 md:p-6 mb-8">
-              <h3 className="text-xl md:text-2xl font-black text-orange-400 mb-2">
-                Want to comment?
-              </h3>
-
-              <p className="text-gray-300 mb-5 text-sm md:text-base">
-                You need an account to post comments or reply to builds.
+              <p className="text-zinc-300 mt-3 text-lg">
+                by <span className="text-white font-bold">{build.owner || "@unknown"}</span>
               </p>
 
-              <a href="/login" className="inline-block bg-orange-500 text-black px-6 md:px-8 py-4 rounded-xl uppercase font-black hover:bg-white transition text-sm md:text-base">
-                Login / Create Account
-              </a>
-            </div>
-          ) : (
-            <form onSubmit={submitComment} className="space-y-4 mb-8">
-              <textarea
-                placeholder="Leave a comment..."
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                className="w-full h-28 md:h-32 bg-black border border-white/10 rounded-2xl px-5 md:px-6 py-4 resize-none outline-none focus:border-orange-500"
-              />
+              <p className="text-zinc-400 mt-3">
+                {build.vehicle || "Vehicle details not added yet."}
+              </p>
 
-              <button type="submit" className="w-full sm:w-auto bg-orange-500 text-black px-8 py-4 rounded-xl uppercase font-black hover:bg-white transition">
-                Post Comment
-              </button>
-            </form>
+              <div className="grid grid-cols-4 gap-3 mt-6">
+                <Stat label="Rating" value={averageRating ? averageRating.toFixed(1) : "0.0"} />
+                <Stat label="Views" value={build.views || 0} />
+                <Stat label="Likes" value={build.likes || 0} />
+                <Stat label="Comments" value={comments.length} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* DESKTOP ACTION BAR */}
+      <section className="hidden md:block sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-zinc-900">
+        <div className="max-w-7xl mx-auto px-5 py-3 flex gap-3">
+          <ActionButton onClick={() => document.getElementById("rating")?.scrollIntoView({ behavior: "smooth" })}>
+            ⭐ Rate
+          </ActionButton>
+          <ActionButton onClick={handleLike}>♡ Like</ActionButton>
+          <ActionButton onClick={() => document.getElementById("comments")?.scrollIntoView({ behavior: "smooth" })}>
+            💬 Comment
+          </ActionButton>
+          <ActionButton onClick={handleShare}>↗ Share</ActionButton>
+        </div>
+      </section>
+
+      <section className="max-w-7xl mx-auto px-5 py-10 space-y-10">
+        {/* BUILD STORY */}
+        <section className="grid lg:grid-cols-[0.8fr_1.2fr] gap-5">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
+            <p className="text-red-500 uppercase text-xs font-black tracking-[0.25em]">
+              Build Story
+            </p>
+            <h2 className="text-3xl font-black mt-3">About this build</h2>
+          </div>
+
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
+            <p className="text-zinc-300 leading-relaxed">
+              {build.description || "No story added yet."}
+            </p>
+
+            <div className="grid md:grid-cols-3 gap-4 mt-6">
+              <StoryCard title="Why they built it" text={build.why_built || "Not added yet"} />
+              <StoryCard title="Favorite mod" text={build.favorite_mod || "Not added yet"} />
+              <StoryCard title="Future plans" text={build.future_plans || "Not added yet"} />
+            </div>
+          </div>
+        </section>
+
+        {/* BUILD TIMELINE */}
+        <section className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-red-500 uppercase text-xs font-black tracking-[0.25em]">
+                Build Timeline
+              </p>
+              <h2 className="text-3xl font-black mt-2">Progress stages</h2>
+            </div>
+            <p className="text-zinc-500 text-sm">Shows the build progress, not just the finished setup.</p>
+          </div>
+
+          <div className="grid md:grid-cols-5 gap-4 mt-6">
+            <TimelineCard stage="Stage 1" title="Bought Stock" text={build.stage_1 || "Not added yet"} />
+            <TimelineCard stage="Stage 2" title="Wheels + Suspension" text={build.stage_2 || "Not added yet"} />
+            <TimelineCard stage="Stage 3" title="Paint / Wrap" text={build.stage_3 || "Not added yet"} />
+            <TimelineCard stage="Stage 4" title="Current Setup" text={build.stage_4 || "Not added yet"} />
+            <TimelineCard stage="Stage 5" title="Future Plans" text={build.stage_5 || "Not added yet"} />
+          </div>
+        </section>
+
+        {/* SPECS */}
+        <section>
+          <h2 className="text-3xl font-black mb-5">Build Specs</h2>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <SpecCard title="Engine" text={build.engine || "Not added yet"} />
+            <SpecCard title="Suspension" text={build.suspension || "Not added yet"} />
+            <SpecCard title="Wheels" text={build.wheels || "Not added yet"} />
+            <SpecCard title="Tires" text={build.tires || "Not added yet"} />
+            <SpecCard title="Interior" text={build.interior || "Not added yet"} />
+            <SpecCard title="Exterior" text={build.exterior || "Not added yet"} />
+            <SpecCard title="Performance" text={build.performance || "Not added yet"} />
+            <SpecCard title="Future Plans" text={build.future_plans || "Not added yet"} />
+          </div>
+        </section>
+
+        {/* GALLERY */}
+        <section>
+          <div className="flex items-end justify-between gap-4 flex-wrap mb-5">
+            <div>
+              <h2 className="text-3xl font-black">Gallery / Videos</h2>
+              <p className="text-zinc-500 mt-1">
+                Photos, walkaround video, exhaust clips, and rolling shots.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-4">
+            <div className="rounded-2xl overflow-hidden bg-black border border-zinc-800">
+              {activeMedia && isVideo(activeMedia) ? (
+                <video src={activeMedia} controls className="w-full max-h-[700px] object-contain bg-black" />
+              ) : (
+                <img
+                  src={activeMedia || build.image_url}
+                  alt={build.title}
+                  className="w-full max-h-[700px] object-cover"
+                />
+              )}
+            </div>
+
+            {mediaItems.length > 1 && (
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3 mt-4">
+                {mediaItems.map((item) => (
+                  <button
+                    key={item.url}
+                    onClick={() => setActiveMedia(item.url)}
+                    className={`h-24 rounded-xl overflow-hidden border bg-black ${
+                      activeMedia === item.url ? "border-red-500" : "border-zinc-800"
+                    }`}
+                  >
+                    {item.type === "video" || isVideo(item.url) ? (
+                      <div className="w-full h-full flex items-center justify-center text-xs text-zinc-300">
+                        ▶ {item.label}
+                      </div>
+                    ) : (
+                      <img src={item.url} alt="" className="w-full h-full object-cover" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* RATING */}
+        <section id="rating" className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
+          <h2 className="text-3xl font-black">Community Rating</h2>
+
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mt-5">
+            <div>
+              <div className="text-4xl text-yellow-400">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <span key={star}>{star <= Math.round(averageRating) ? "★" : "☆"}</span>
+                ))}
+              </div>
+
+              <p className="text-zinc-300 mt-2">
+                {averageRating ? averageRating.toFixed(1) : "0.0"} / 5 · {ratings.length} ratings
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-zinc-500 mb-2">
+                {user ? "Tap a star to rate this build." : "Sign in to rate this build."}
+              </p>
+
+              <div className="flex gap-2 text-4xl">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => handleRating(star)}
+                    className={star <= myRating ? "text-yellow-400" : "text-zinc-700"}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* COMMENTS */}
+        <section id="comments" className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
+          <h2 className="text-3xl font-black">Comments</h2>
+          <p className="text-zinc-500 mt-1">Talk builds, ask questions, and show love.</p>
+
+          {build.owner_comment && (
+            <div className="mt-5 bg-red-600/10 border border-red-600/30 rounded-2xl p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-red-400 font-black">
+                Pinned Owner Comment
+              </p>
+              <p className="text-zinc-200 mt-2">{build.owner_comment}</p>
+            </div>
           )}
 
-          <div className="space-y-4">
-            {mainComments.length === 0 && (
-              <p className="text-gray-500">No comments yet. Be the first.</p>
-            )}
-
-            {mainComments.map((comment) => {
-              const replies = comments.filter((reply) => reply.parent_id === comment.id);
-
-              return (
-                <div key={comment.id} className="bg-black border border-white/10 rounded-2xl p-5 md:p-6">
-                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-4 mb-2">
-                    <div className="font-bold text-orange-500 break-all">{comment.author}</div>
-                    <div className="text-gray-500 text-sm">{formatDate(comment.created_at)}</div>
-                  </div>
-
-                  <p className="text-gray-300 mb-4 text-sm md:text-base break-words">
-                    {comment.content}
-                  </p>
-
-                  {user && (
-                    <button onClick={() => setReplyTo(comment.id)} className="text-sm uppercase text-orange-500 hover:text-white">
-                      Reply
-                    </button>
-                  )}
-
-                  {replyTo === comment.id && (
-                    <div className="mt-4 space-y-3">
-                      <textarea
-                        placeholder="Write a reply..."
-                        value={replyContent}
-                        onChange={(e) => setReplyContent(e.target.value)}
-                        className="w-full h-24 bg-zinc-950 border border-white/10 rounded-2xl px-5 py-4 resize-none"
-                      />
-
-                      <button onClick={() => submitReply(comment.id)} className="w-full sm:w-auto bg-orange-500 text-black px-6 py-3 rounded-xl uppercase font-black">
-                        Post Reply
-                      </button>
-                    </div>
-                  )}
-
-                  {replies.length > 0 && (
-                    <div className="mt-6 pl-4 md:pl-5 border-l border-white/10 space-y-4">
-                      {replies.map((reply) => (
-                        <div key={reply.id} className="bg-zinc-950 border border-white/10 rounded-2xl p-4 md:p-5">
-                          <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-4 mb-2">
-                            <div className="font-bold text-orange-500 break-all">{reply.author}</div>
-                            <div className="text-gray-500 text-sm">{formatDate(reply.created_at)}</div>
-                          </div>
-
-                          <p className="text-gray-300 break-words">{reply.content}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      </section>
-
-      <section className="max-w-6xl mx-auto px-4 md:px-6 pb-16 md:pb-24">
-        <Card title="Report This Build">
-          <form onSubmit={submitReport} className="space-y-4">
-            <select value={reportReason} onChange={(e) => setReportReason(e.target.value)} className="w-full bg-black border border-white/10 rounded-2xl px-5 md:px-6 py-4">
-              <option value="">Select reason</option>
-              <option value="spam">Spam</option>
-              <option value="stolen_photos">Stolen photos</option>
-              <option value="nsfw">NSFW content</option>
-              <option value="wrong_info">Wrong information</option>
-              <option value="other">Other</option>
-            </select>
-
-            <textarea
-              placeholder="Add details..."
-              value={reportDetails}
-              onChange={(e) => setReportDetails(e.target.value)}
-              className="w-full h-28 bg-black border border-white/10 rounded-2xl px-5 md:px-6 py-4 resize-none"
+          <form onSubmit={handleComment} className="mt-5 flex gap-3">
+            <input
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder={user ? "Drop a comment..." : "Sign in to comment..."}
+              className="flex-1 bg-black border border-zinc-800 rounded-2xl px-4 py-3 outline-none focus:border-red-500"
             />
-
-            <button type="submit" className="w-full sm:w-auto border border-red-500 text-red-400 px-8 py-4 rounded-xl uppercase font-black hover:bg-red-500 hover:text-white transition">
-              Submit Report
+            <button className="bg-white text-black font-black rounded-2xl px-5">
+              Post
             </button>
           </form>
-        </Card>
+
+          <div className="mt-6 space-y-4">
+            {comments.length === 0 && (
+              <p className="text-zinc-500">No comments yet. Be the first.</p>
+            )}
+
+            {comments.map((comment) => (
+              <div key={comment.id} className="bg-black border border-zinc-800 rounded-2xl p-4">
+                {comment.is_owner_reply && (
+                  <p className="text-xs text-red-400 font-black mb-2">OWNER REPLY</p>
+                )}
+                <p className="text-zinc-300">{comment.content}</p>
+                <p className="text-xs text-zinc-600 mt-2">
+                  {new Date(comment.created_at).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* SIMILAR BUILDS */}
+        <section>
+          <h2 className="text-3xl font-black mb-5">
+            More {build.category || "Similar"} Builds
+          </h2>
+
+          {similarBuilds.length === 0 ? (
+            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-zinc-500">
+              No similar builds yet.
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-5">
+              {similarBuilds.map((item) => (
+                <Link
+                  href={`/build/${item.id}`}
+                  key={item.id}
+                  className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden hover:border-red-500 transition"
+                >
+                  <img src={item.image_url} alt={item.title} className="w-full h-52 object-cover" />
+                  <div className="p-5">
+                    <p className="text-xs text-red-500 font-black uppercase">
+                      {item.category}
+                    </p>
+                    <h3 className="text-xl font-black mt-1">{item.title}</h3>
+                    <p className="text-zinc-500 text-sm mt-1">{item.vehicle}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
       </section>
 
-      {selectedImage && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 md:p-6" onClick={() => setSelectedImage(null)}>
-          <img src={selectedImage} alt="Selected build" className="max-w-full max-h-full rounded-2xl md:rounded-3xl object-contain" />
+      {/* MOBILE BOTTOM ACTION BAR */}
+      <section className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur border-t border-zinc-800 px-3 py-3">
+        <div className="grid grid-cols-4 gap-2">
+          <MobileAction onClick={() => document.getElementById("rating")?.scrollIntoView({ behavior: "smooth" })}>
+            ⭐ Rate
+          </MobileAction>
+          <MobileAction onClick={handleLike}>♡ Like</MobileAction>
+          <MobileAction onClick={() => document.getElementById("comments")?.scrollIntoView({ behavior: "smooth" })}>
+            💬 Comment
+          </MobileAction>
+          <MobileAction onClick={handleShare}>↗ Share</MobileAction>
         </div>
-      )}
+      </section>
     </main>
-  );
-}
-
-function Panel({ children }) {
-  return (
-    <div className="bg-zinc-950 border border-white/10 rounded-3xl p-5 md:p-8">
-      {children}
-    </div>
-  );
-}
-
-function Card({ title, children }) {
-  return (
-    <div className="bg-zinc-950 border border-white/10 rounded-3xl p-5 md:p-8">
-      <h2 className="text-2xl md:text-3xl font-black mb-5 md:mb-6">{title}</h2>
-      {children}
-    </div>
-  );
-}
-
-function SpecCard({ label, value }) {
-  return (
-    <div className="bg-zinc-950 border border-orange-500/30 rounded-3xl p-5 md:p-6">
-      <p className="text-orange-500 uppercase text-xs md:text-sm font-bold mb-3">
-        {label}
-      </p>
-
-      <h3 className="text-xl md:text-2xl font-black break-words">
-        {value || "Not added yet"}
-      </h3>
-    </div>
   );
 }
 
 function Stat({ label, value }) {
   return (
-    <div className="bg-black border border-white/10 rounded-2xl p-4 md:p-5">
-      <p className="text-gray-500 uppercase text-xs md:text-sm mb-2">{label}</p>
-      <p className="text-2xl md:text-3xl font-black">{value}</p>
+    <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-3 text-center">
+      <p className="text-xl font-black">{value}</p>
+      <p className="text-[11px] text-zinc-500 uppercase">{label}</p>
+    </div>
+  );
+}
+
+function ActionButton({ children, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-full px-5 py-3 font-bold transition"
+    >
+      {children}
+    </button>
+  );
+}
+
+function MobileAction({ children, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="bg-zinc-900 border border-zinc-800 rounded-2xl py-3 text-xs font-black"
+    >
+      {children}
+    </button>
+  );
+}
+
+function StoryCard({ title, text }) {
+  return (
+    <div className="bg-black border border-zinc-800 rounded-2xl p-4">
+      <h3 className="font-black">{title}</h3>
+      <p className="text-zinc-500 text-sm mt-2">{text}</p>
+    </div>
+  );
+}
+
+function SpecCard({ title, text }) {
+  return (
+    <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
+      <h3 className="text-xl font-black">{title}</h3>
+      <p className="text-zinc-400 mt-3 leading-relaxed">{text}</p>
+    </div>
+  );
+}
+
+function TimelineCard({ stage, title, text }) {
+  return (
+    <div className="bg-black border border-zinc-800 rounded-2xl p-4">
+      <p className="text-xs text-red-500 font-black uppercase">{stage}</p>
+      <h3 className="font-black mt-2">{title}</h3>
+      <p className="text-zinc-500 text-sm mt-2">{text}</p>
     </div>
   );
 }
