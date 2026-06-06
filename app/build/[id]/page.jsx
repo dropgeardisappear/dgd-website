@@ -20,6 +20,7 @@ export default function BuildPage() {
   const [selectedRating, setSelectedRating] = useState(0);
   const [commentText, setCommentText] = useState("");
   const [loading, setLoading] = useState(true);
+  const [liked, setLiked] = useState(false);
 
   useEffect(() => {
     if (id) loadBuildPage();
@@ -33,6 +34,7 @@ export default function BuildPage() {
     } = await supabase.auth.getUser();
 
     setUser(user || null);
+    
 
     if (user) {
       const { data: profileData } = await supabase
@@ -43,6 +45,16 @@ export default function BuildPage() {
 
       setProfile(profileData || null);
     }
+    if (user) {
+  const { data: existingLike } = await supabase
+    .from("likes")
+    .select("*")
+    .eq("post_id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  setLiked(!!existingLike);
+}
 
     const { data: post, error } = await supabase
       .from("posts")
@@ -145,24 +157,42 @@ export default function BuildPage() {
   }
 
 async function handleLike() {
-  if (!user) {
-    alert("Sign in to like this build.");
-    return;
+if (!user) {
+  alert("Sign in to like this build.");
+  return;
+}
+  const { data: existingLike } = await supabase
+    .from("likes")
+    .select("*")
+    .eq("post_id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (existingLike) {
+    await supabase
+      .from("likes")
+      .delete()
+      .eq("post_id", id)
+      .eq("user_id", user.id);
+  } else {
+    await supabase.from("likes").insert({
+      post_id: id,
+      user_id: user.id,
+    });
   }
 
-  const newLikes = (build.likes || 0) + 1;
+  const { count } = await supabase
+    .from("likes")
+    .select("*", { count: "exact", head: true })
+    .eq("post_id", id);
 
-  const { error } = await supabase
+  await supabase
     .from("posts")
-    .update({ likes: newLikes })
+    .update({ likes: count || 0 })
     .eq("id", id);
-
-  if (error) {
-    alert(error.message);
-    return;
-  }
-
-  setBuild({ ...build, likes: newLikes });
+    
+setLiked(!existingLike);
+  setBuild({ ...build, likes: count || 0 });
 }
 
   async function handleRating() {
@@ -355,7 +385,9 @@ async function handleLike() {
           <ActionButton onClick={() => document.getElementById("comments")?.scrollIntoView({ behavior: "smooth" })}>
             Comment
           </ActionButton>
-          <ActionButton onClick={handleLike}>Like</ActionButton>
+     <ActionButton onClick={handleLike}>
+  {liked ? "🔥 Build Liked" : "🔥 Like This Build"}
+</ActionButton>
         </div>
       </section>
 
