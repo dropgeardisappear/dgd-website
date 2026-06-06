@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
+
 export default function BuildPage() {
   const { id } = useParams();
 
@@ -12,9 +13,11 @@ export default function BuildPage() {
   const [comments, setComments] = useState([]);
   const [ratings, setRatings] = useState([]);
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
 
   const [activeMedia, setActiveMedia] = useState(null);
   const [myRating, setMyRating] = useState(0);
+  const [selectedRating, setSelectedRating] = useState(0);
   const [commentText, setCommentText] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -29,15 +32,25 @@ export default function BuildPage() {
       data: { user },
     } = await supabase.auth.getUser();
 
-    setUser(user);
+    setUser(user || null);
 
-    const { data: post, error: postError } = await supabase
+    if (user) {
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      setProfile(profileData || null);
+    }
+
+    const { data: post, error } = await supabase
       .from("posts")
       .select("*")
       .eq("id", id)
       .single();
 
-    if (postError || !post) {
+    if (error || !post) {
       setBuild(null);
       setLoading(false);
       return;
@@ -77,6 +90,7 @@ export default function BuildPage() {
     if (user && ratingData?.length) {
       const mine = ratingData.find((item) => item.user_id === user.id);
       setMyRating(mine?.rating || 0);
+      setSelectedRating(mine?.rating || 0);
     }
 
     setLoading(false);
@@ -88,91 +102,97 @@ export default function BuildPage() {
     return total / ratings.length;
   }, [ratings]);
 
-const mediaItems = useMemo(() => {
-  if (!build) return [];
+  const mediaItems = useMemo(() => {
+    if (!build) return [];
 
-  const items = [];
+    const items = [];
 
-  if (build.video_url) {
-    items.push({ type: "video", url: build.video_url, label: "Walkaround" });
-  }
+    if (build.video_url) {
+      items.push({ type: "video", url: build.video_url, label: "Video" });
+    }
 
-  if (build.image_url) {
-    items.push({ type: "image", url: build.image_url, label: "Main Photo" });
-  }
+    if (build.image_url) {
+      items.push({ type: "image", url: build.image_url, label: "Main" });
+    }
 
-  const photos = build.gallery_images || build.gallery || [];
+    const photos = build.gallery_images || build.gallery || [];
 
-  if (Array.isArray(photos)) {
-    photos.forEach((url, index) => {
-      if (url && !items.some((item) => item.url === url)) {
-        items.push({
-          type: isVideo(url) ? "video" : "image",
-          url,
-          label: `Photo ${index + 1}`,
-        });
-      }
-    });
-  }
+    if (Array.isArray(photos)) {
+      photos.forEach((url, index) => {
+        if (url && !items.some((item) => item.url === url)) {
+          items.push({
+            type: isVideo(url) ? "video" : "image",
+            url,
+            label: `Photo ${index + 1}`,
+          });
+        }
+      });
+    }
 
-  const videos = build.videos || [];
-
-  if (Array.isArray(videos)) {
-    videos.forEach((url, index) => {
-      if (url && !items.some((item) => item.url === url)) {
-        items.push({
-          type: "video",
-          url,
-          label: `Video ${index + 1}`,
-        });
-      }
-    });
-  }
-
-  return items;
-}, [build]);
+    return items;
+  }, [build]);
 
   function isVideo(url) {
     return /\.(mp4|mov|webm|m4v)$/i.test(url || "");
   }
 
-  async function handleLike() {
-    if (!user) {
-      alert("Sign in to like this build.");
-      return;
-    }
-
-    const newLikes = (build.likes || 0) + 1;
-
-    const { error } = await supabase
-      .from("posts")
-      .update({ likes: newLikes })
-      .eq("id", id);
-
-    if (!error) {
-      setBuild({ ...build, likes: newLikes });
-    }
+  function garageUsername() {
+    return (build?.owner || "")
+      .replace("@", "")
+      .replace(/\s+/g, "")
+      .toLowerCase()
+      .trim();
   }
 
-  async function handleRating(value) {
+async function handleLike() {
+  if (!user) {
+    alert("Sign in to like this build.");
+    return;
+  }
+
+  const newLikes = (build.likes || 0) + 1;
+
+  const { error } = await supabase
+    .from("posts")
+    .update({ likes: newLikes })
+    .eq("id", id);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  setBuild({ ...build, likes: newLikes });
+}
+
+  async function handleRating() {
     if (!user) {
       alert("Sign in to rate this build.");
       return;
     }
 
-    setMyRating(value);
+    if (!selectedRating) {
+      alert("Select a rating first.");
+      return;
+    }
 
-    await supabase.from("ratings").upsert(
+    const { error } = await supabase.from("ratings").upsert(
       {
         post_id: id,
         user_id: user.id,
-        rating: value,
+        rating: selectedRating,
       },
       {
         onConflict: "post_id,user_id",
       }
     );
 
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setMyRating(selectedRating);
     loadBuildPage();
   }
 
@@ -189,6 +209,8 @@ const mediaItems = useMemo(() => {
     const { error } = await supabase.from("comments").insert({
       post_id: id,
       user_id: user.id,
+      author: profile?.username ? `@${profile.username}` : user.email,
+      author_email: user.email,
       content: commentText.trim(),
     });
 
@@ -223,44 +245,57 @@ const mediaItems = useMemo(() => {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white pb-28 md:pb-10">
-      {/* HERO */}
+    <main className="min-h-screen bg-black text-white pb-24 md:pb-10">
       <section className="relative border-b border-zinc-900">
-        <div className="absolute inset-0 opacity-30">
+        <div className="absolute inset-0 opacity-25">
           {activeMedia && isVideo(activeMedia) ? (
-            <video src={activeMedia} autoPlay muted loop className="w-full h-full object-cover" />
+            <video
+              src={activeMedia}
+              autoPlay
+              muted
+              loop
+              className="w-full h-full object-cover"
+            />
           ) : (
-            <img src={activeMedia || build.image_url} alt="" className="w-full h-full object-cover" />
+            <img
+              src={activeMedia || build.image_url}
+              alt=""
+              className="w-full h-full object-cover"
+            />
           )}
         </div>
 
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/80 to-black" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/80 to-black" />
 
-        <div className="relative max-w-7xl mx-auto px-5 py-8">
+        <div className="relative max-w-7xl mx-auto px-4 md:px-5 py-8 md:py-10">
           <Link href="/" className="text-sm text-zinc-400 hover:text-white">
             ← Back to builds
           </Link>
 
-          <div className="grid lg:grid-cols-[1.25fr_0.75fr] gap-8 mt-8 items-end">
+          <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-6 md:gap-8 mt-8 items-center">
             <div className="rounded-3xl overflow-hidden border border-zinc-800 bg-black shadow-2xl">
               {activeMedia && isVideo(activeMedia) ? (
-                <video src={activeMedia} controls className="w-full max-h-[650px] object-contain bg-black" />
+                <video
+                  src={activeMedia}
+                  controls
+                  className="w-full max-h-[620px] object-contain bg-black"
+                />
               ) : (
                 <img
                   src={activeMedia || build.image_url}
                   alt={build.title}
-                  className="w-full max-h-[650px] object-cover"
+                  className="w-full max-h-[620px] object-cover"
                 />
               )}
             </div>
 
-            <div className="bg-black/70 backdrop-blur border border-zinc-800 rounded-3xl p-6">
+            <div className="bg-black/70 backdrop-blur border border-zinc-800 rounded-3xl p-5 md:p-6">
               <div className="flex flex-wrap gap-2">
                 <span className="bg-red-600 text-white text-xs font-black uppercase px-3 py-1 rounded-full">
                   {build.category || "Build"}
                 </span>
                 <span className="bg-zinc-900 text-zinc-300 text-xs font-bold uppercase px-3 py-1 rounded-full">
-                  DGD Featured
+                  DGD Garage
                 </span>
               </div>
 
@@ -269,12 +304,31 @@ const mediaItems = useMemo(() => {
               </h1>
 
               <p className="text-zinc-300 mt-3 text-lg">
-                by <span className="text-white font-bold">{build.owner || "@unknown"}</span>
+                by{" "}
+                <span className="text-white font-bold">
+                  {build.owner || "@unknown"}
+                </span>
               </p>
 
               <p className="text-zinc-400 mt-3">
                 {build.vehicle || "Vehicle details not added yet."}
               </p>
+
+              <div className="flex flex-col sm:flex-row gap-3 mt-5">
+                <Link
+                  href={`/garage/${garageUsername()}`}
+                  className="bg-red-600 hover:bg-red-700 px-5 py-3 rounded-2xl font-black text-center transition"
+                >
+                  View Garage
+                </Link>
+
+                <button
+                  onClick={handleShare}
+                  className="border border-zinc-700 hover:border-white px-5 py-3 rounded-2xl font-black transition"
+                >
+                  Share Build
+                </button>
+              </div>
 
               <div className="grid grid-cols-4 gap-3 mt-6">
                 <Stat label="Rating" value={averageRating ? averageRating.toFixed(1) : "0.0"} />
@@ -287,67 +341,27 @@ const mediaItems = useMemo(() => {
         </div>
       </section>
 
-      {/* DESKTOP ACTION BAR */}
       <section className="hidden md:block sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-zinc-900">
         <div className="max-w-7xl mx-auto px-5 py-3 flex gap-3">
+          <ActionButton onClick={() => document.getElementById("specs")?.scrollIntoView({ behavior: "smooth" })}>
+            Specs
+          </ActionButton>
+          <ActionButton onClick={() => document.getElementById("gallery")?.scrollIntoView({ behavior: "smooth" })}>
+            Gallery
+          </ActionButton>
           <ActionButton onClick={() => document.getElementById("rating")?.scrollIntoView({ behavior: "smooth" })}>
-            ⭐ Rate
+            Rate
           </ActionButton>
-          <ActionButton onClick={handleLike}>♡ Like</ActionButton>
           <ActionButton onClick={() => document.getElementById("comments")?.scrollIntoView({ behavior: "smooth" })}>
-            💬 Comment
+            Comment
           </ActionButton>
-          <ActionButton onClick={handleShare}>↗ Share</ActionButton>
+          <ActionButton onClick={handleLike}>Like</ActionButton>
         </div>
       </section>
 
-      <section className="max-w-7xl mx-auto px-5 py-10 space-y-10">
-        {/* BUILD STORY */}
-        <section className="grid lg:grid-cols-[0.8fr_1.2fr] gap-5">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
-            <p className="text-red-500 uppercase text-xs font-black tracking-[0.25em]">
-              Build Story
-            </p>
-            <h2 className="text-3xl font-black mt-3">About this build</h2>
-          </div>
-
-          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
-            <p className="text-zinc-300 leading-relaxed">
-              {build.description || "No story added yet."}
-            </p>
-
-            <div className="grid md:grid-cols-3 gap-4 mt-6">
-              <StoryCard title="Why they built it" text={build.why_built || "Not added yet"} />
-              <StoryCard title="Favorite mod" text={build.favorite_mod || "Not added yet"} />
-              <StoryCard title="Future plans" text={build.future_plans || "Not added yet"} />
-            </div>
-          </div>
-        </section>
-
-        {/* BUILD TIMELINE */}
-        <section className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-red-500 uppercase text-xs font-black tracking-[0.25em]">
-                Build Timeline
-              </p>
-              <h2 className="text-3xl font-black mt-2">Progress stages</h2>
-            </div>
-            <p className="text-zinc-500 text-sm">Shows the build progress, not just the finished setup.</p>
-          </div>
-
-          <div className="grid md:grid-cols-5 gap-4 mt-6">
-            <TimelineCard stage="Stage 1" title="Bought Stock" text={build.stage_1 || "Not added yet"} />
-            <TimelineCard stage="Stage 2" title="Wheels + Suspension" text={build.stage_2 || "Not added yet"} />
-            <TimelineCard stage="Stage 3" title="Paint / Wrap" text={build.stage_3 || "Not added yet"} />
-            <TimelineCard stage="Stage 4" title="Current Setup" text={build.stage_4 || "Not added yet"} />
-            <TimelineCard stage="Stage 5" title="Future Plans" text={build.stage_5 || "Not added yet"} />
-          </div>
-        </section>
-
-        {/* SPECS */}
-        <section>
-          <h2 className="text-3xl font-black mb-5">Build Specs</h2>
+      <section className="max-w-7xl mx-auto px-4 md:px-5 py-10 space-y-10">
+        <section id="specs">
+          <SectionTitle eyebrow="Build Details" title="Specs" />
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             <SpecCard title="Engine" text={build.engine || "Not added yet"} />
@@ -356,26 +370,20 @@ const mediaItems = useMemo(() => {
             <SpecCard title="Tires" text={build.tires || "Not added yet"} />
             <SpecCard title="Interior" text={build.interior || "Not added yet"} />
             <SpecCard title="Exterior" text={build.exterior || "Not added yet"} />
-            <SpecCard title="Performance" text={build.performance || "Not added yet"} />
-            <SpecCard title="Future Plans" text={build.future_plans || "Not added yet"} />
           </div>
         </section>
 
-        {/* GALLERY */}
-        <section>
-          <div className="flex items-end justify-between gap-4 flex-wrap mb-5">
-            <div>
-              <h2 className="text-3xl font-black">Gallery / Videos</h2>
-              <p className="text-zinc-500 mt-1">
-                Photos, walkaround video, exhaust clips, and rolling shots.
-              </p>
-            </div>
-          </div>
+        <section id="gallery">
+          <SectionTitle eyebrow="Media" title="Gallery / Videos" />
 
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-4">
             <div className="rounded-2xl overflow-hidden bg-black border border-zinc-800">
               {activeMedia && isVideo(activeMedia) ? (
-                <video src={activeMedia} controls className="w-full max-h-[700px] object-contain bg-black" />
+                <video
+                  src={activeMedia}
+                  controls
+                  className="w-full max-h-[700px] object-contain bg-black"
+                />
               ) : (
                 <img
                   src={activeMedia || build.image_url}
@@ -391,13 +399,13 @@ const mediaItems = useMemo(() => {
                   <button
                     key={item.url}
                     onClick={() => setActiveMedia(item.url)}
-                    className={`h-24 rounded-xl overflow-hidden border bg-black ${
+                    className={`h-20 md:h-24 rounded-xl overflow-hidden border bg-black ${
                       activeMedia === item.url ? "border-red-500" : "border-zinc-800"
                     }`}
                   >
                     {item.type === "video" || isVideo(item.url) ? (
                       <div className="w-full h-full flex items-center justify-center text-xs text-zinc-300">
-                        ▶ {item.label}
+                        ▶
                       </div>
                     ) : (
                       <img src={item.url} alt="" className="w-full h-full object-cover" />
@@ -409,9 +417,24 @@ const mediaItems = useMemo(() => {
           </div>
         </section>
 
-        {/* RATING */}
-        <section id="rating" className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
-          <h2 className="text-3xl font-black">Community Rating</h2>
+        <section>
+          <SectionTitle eyebrow="Story" title="About This Build" />
+
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 md:p-6">
+            <p className="text-zinc-300 leading-relaxed">
+              {build.description || "No story added yet."}
+            </p>
+
+            <div className="grid md:grid-cols-3 gap-4 mt-6">
+              <StoryCard title="Why they built it" text={build.why_built || "Not added yet"} />
+              <StoryCard title="Favorite mod" text={build.favorite_mod || "Not added yet"} />
+              <StoryCard title="Future plans" text={build.future_plans || "Not added yet"} />
+            </div>
+          </div>
+        </section>
+
+        <section id="rating" className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 md:p-6">
+          <SectionTitle eyebrow="Community" title="Rating" />
 
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mt-5">
             <div>
@@ -428,46 +451,43 @@ const mediaItems = useMemo(() => {
 
             <div>
               <p className="text-sm text-zinc-500 mb-2">
-                {user ? "Tap a star to rate this build." : "Sign in to rate this build."}
+                {user ? "Select stars, then submit." : "Sign in to rate this build."}
               </p>
 
-              <div className="flex gap-2 text-4xl">
+              <div className="flex gap-2 text-4xl mb-4">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
                     key={star}
-                    onClick={() => handleRating(star)}
-                    className={star <= myRating ? "text-yellow-400" : "text-zinc-700"}
+                    onClick={() => setSelectedRating(star)}
+                    className={star <= selectedRating ? "text-yellow-400" : "text-zinc-700"}
                   >
                     ★
                   </button>
                 ))}
               </div>
+
+              <button
+                onClick={handleRating}
+                disabled={!selectedRating}
+                className="w-full bg-white text-black font-black rounded-2xl px-6 py-3 disabled:opacity-40"
+              >
+                Submit Rating
+              </button>
             </div>
           </div>
         </section>
 
-        {/* COMMENTS */}
-        <section id="comments" className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
-          <h2 className="text-3xl font-black">Comments</h2>
-          <p className="text-zinc-500 mt-1">Talk builds, ask questions, and show love.</p>
+        <section id="comments" className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 md:p-6">
+          <SectionTitle eyebrow="Community" title="Comments" />
 
-          {build.owner_comment && (
-            <div className="mt-5 bg-red-600/10 border border-red-600/30 rounded-2xl p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-red-400 font-black">
-                Pinned Owner Comment
-              </p>
-              <p className="text-zinc-200 mt-2">{build.owner_comment}</p>
-            </div>
-          )}
-
-          <form onSubmit={handleComment} className="mt-5 flex gap-3">
+          <form onSubmit={handleComment} className="mt-5 flex flex-col sm:flex-row gap-3">
             <input
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               placeholder={user ? "Drop a comment..." : "Sign in to comment..."}
               className="flex-1 bg-black border border-zinc-800 rounded-2xl px-4 py-3 outline-none focus:border-red-500"
             />
-            <button className="bg-white text-black font-black rounded-2xl px-5">
+            <button className="bg-white text-black font-black rounded-2xl px-5 py-3">
               Post
             </button>
           </form>
@@ -479,23 +499,22 @@ const mediaItems = useMemo(() => {
 
             {comments.map((comment) => (
               <div key={comment.id} className="bg-black border border-zinc-800 rounded-2xl p-4">
-                {comment.is_owner_reply && (
-                  <p className="text-xs text-red-400 font-black mb-2">OWNER REPLY</p>
-                )}
-                <p className="text-zinc-300">{comment.content}</p>
-                <p className="text-xs text-zinc-600 mt-2">
-                  {new Date(comment.created_at).toLocaleString()}
-                </p>
+                <div className="flex justify-between gap-3 flex-wrap">
+                  <p className="text-red-500 font-black">
+                    {comment.author || "@user"}
+                  </p>
+                  <p className="text-xs text-zinc-600">
+                    {new Date(comment.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <p className="text-zinc-300 mt-2">{comment.content}</p>
               </div>
             ))}
           </div>
         </section>
 
-        {/* SIMILAR BUILDS */}
         <section>
-          <h2 className="text-3xl font-black mb-5">
-            More {build.category || "Similar"} Builds
-          </h2>
+          <SectionTitle eyebrow="More Builds" title={`More ${build.category || "Similar"} Builds`} />
 
           {similarBuilds.length === 0 ? (
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-zinc-500">
@@ -524,20 +543,34 @@ const mediaItems = useMemo(() => {
         </section>
       </section>
 
-      {/* MOBILE BOTTOM ACTION BAR */}
       <section className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur border-t border-zinc-800 px-3 py-3">
         <div className="grid grid-cols-4 gap-2">
+          <MobileAction onClick={() => document.getElementById("specs")?.scrollIntoView({ behavior: "smooth" })}>
+            Specs
+          </MobileAction>
+          <MobileAction onClick={() => document.getElementById("gallery")?.scrollIntoView({ behavior: "smooth" })}>
+            Gallery
+          </MobileAction>
           <MobileAction onClick={() => document.getElementById("rating")?.scrollIntoView({ behavior: "smooth" })}>
-            ⭐ Rate
+            Rate
           </MobileAction>
-          <MobileAction onClick={handleLike}>♡ Like</MobileAction>
           <MobileAction onClick={() => document.getElementById("comments")?.scrollIntoView({ behavior: "smooth" })}>
-            💬 Comment
+            Comment
           </MobileAction>
-          <MobileAction onClick={handleShare}>↗ Share</MobileAction>
         </div>
       </section>
     </main>
+  );
+}
+
+function SectionTitle({ eyebrow, title }) {
+  return (
+    <div className="mb-5">
+      <p className="text-red-500 uppercase text-xs font-black tracking-[0.25em]">
+        {eyebrow}
+      </p>
+      <h2 className="text-3xl md:text-4xl font-black mt-2">{title}</h2>
+    </div>
   );
 }
 
@@ -586,16 +619,6 @@ function SpecCard({ title, text }) {
     <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
       <h3 className="text-xl font-black">{title}</h3>
       <p className="text-zinc-400 mt-3 leading-relaxed">{text}</p>
-    </div>
-  );
-}
-
-function TimelineCard({ stage, title, text }) {
-  return (
-    <div className="bg-black border border-zinc-800 rounded-2xl p-4">
-      <p className="text-xs text-red-500 font-black uppercase">{stage}</p>
-      <h3 className="font-black mt-2">{title}</h3>
-      <p className="text-zinc-500 text-sm mt-2">{text}</p>
     </div>
   );
 }
