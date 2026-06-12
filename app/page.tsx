@@ -18,7 +18,7 @@ export default function HomePage() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const truckCategories = ["Prerunner", "Lifted", "Work/Tow", "Street", "Drag", "OEM+"];
-  const carCategories = ["Drift", "Static", "Track", "Drag", "OEM+", "Offroad"];
+  const carCategories = ["Drift", "Stanced", "Track", "Drag", "OEM+", "Offroad"];
 
   async function checkUser() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -536,11 +536,34 @@ function FooterLinks({ user }: any) {
         {user && <a href="/notifications" className="block hover:text-white">Notifications</a>}
       </div>
 
-      <div className="space-y-3">
-        <div>Instagram</div>
-        <div>TikTok</div>
-        <div>YouTube</div>
-      </div>
+   <div className="space-y-3">
+  <a
+    href="https://instagram.com/dropgeardisappear.us"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="block hover:text-white"
+  >
+    Instagram
+  </a>
+
+  <a
+    href="https://tiktok.com/@dropgeardisappear.us"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="block hover:text-white"
+  >
+    TikTok
+  </a>
+
+  <a
+    href="https://www.youtube.com/@vkspeedzzz"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="block hover:text-white"
+  >
+    YouTube
+  </a>
+</div>
     </>
   );
 }
