@@ -173,7 +173,7 @@ export default function EditBuildPage() {
               {vehicleType === "Car" && (
                 <>
                   <option value="Drift">Drift</option>
-                  <option value="Static">Static</option>
+                  <option value="Stanced">Stanced</option>
                   <option value="Track">Track</option>
                   <option value="Drag">Drag</option>
                   <option value="OEM+">OEM+</option>

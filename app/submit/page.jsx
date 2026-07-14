@@ -11,13 +11,19 @@ const supabase = createClient(
 const inputClass =
   "w-full bg-black border border-white/10 rounded-2xl px-5 py-4 text-white outline-none focus:border-orange-500 transition placeholder:text-zinc-600";
 
+const vehicleCategories = {
+  Car: ["Drift", "Stanced", "Track", "Drag", "OEM+", "Offroad"],
+  Truck: ["Prerunner", "Lifted", "Dropped", "Street", "Work/Tow", "Drag", "OEM+"],
+  Motorcycle: ["Dirt Bike", "Street Bike", "Custom"],
+};
+
 export default function SubmitPage() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [checkingUser, setCheckingUser] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [title, setTitle] = useState("");
-  const [owner, setOwner] = useState("");
   const [vehicle, setVehicle] = useState("");
   const [vehicleType, setVehicleType] = useState("");
   const [category, setCategory] = useState("");
@@ -33,74 +39,148 @@ export default function SubmitPage() {
   const [interior, setInterior] = useState("");
   const [exterior, setExterior] = useState("");
   const [performance, setPerformance] = useState("");
-  const [futurePlans, setFuturePlans] = useState("");
+
+  const [bikeStory, setBikeStory] = useState("");
+  const [bikeMods, setBikeMods] = useState("");
 
   const [whyBuilt, setWhyBuilt] = useState("");
   const [favoriteMod, setFavoriteMod] = useState("");
+  const [futurePlans, setFuturePlans] = useState("");
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isMotorcycle = vehicleType === "Motorcycle";
+  const owner = profile?.username
+    ? `@${profile.username}`
+    : user?.email || "";
 
-  const imagePreviews = useMemo(() => {
-    return imageFiles.map((file) => URL.createObjectURL(file));
-  }, [imageFiles]);
+  const imagePreviews = useMemo(
+    () => imageFiles.map((file) => URL.createObjectURL(file)),
+    [imageFiles]
+  );
 
-  const videoPreviews = useMemo(() => {
-    return videoFiles.map((file) => URL.createObjectURL(file));
-  }, [videoFiles]);
+  const videoPreviews = useMemo(
+    () => videoFiles.map((file) => URL.createObjectURL(file)),
+    [videoFiles]
+  );
 
   useEffect(() => {
     async function checkUser() {
-  const {
-  data: { user },
-  error,
-} = await supabase.auth.getUser();
+      const {
+        data: { user: currentUser },
+        error,
+      } = await supabase.auth.getUser();
 
-if (error || !user) {
-  await supabase.auth.signOut();
-  setUser(null);
-  setCheckingUser(false);
-  return;
-}
-
-setUser(user);
-
-  const { data } = await supabase
-  .from("profiles")
-  .select("*")
-  .eq("id", user.id)
-  .single();
-
-      if (data) {
-        setProfile(data);
-        setOwner(`@${data.username}`);
-      } else {
-        setOwner(user.email);
+      if (error || !currentUser) {
+        setUser(null);
+        setCheckingUser(false);
+        return;
       }
 
+      setUser(currentUser);
+
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUser.id)
+        .maybeSingle();
+
+      setProfile(profileData || null);
       setCheckingUser(false);
     }
 
     checkUser();
   }, []);
 
-  function handleImageChange(e) {
-    setImageFiles(Array.from(e.target.files || []));
+  useEffect(() => {
+    return () => {
+      imagePreviews.forEach((url) => URL.revokeObjectURL(url));
+      videoPreviews.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imagePreviews, videoPreviews]);
+
+  function handleVehicleTypeChange(event) {
+    setVehicleType(event.target.value);
+    setCategory("");
   }
 
-  function handleVideoChange(e) {
-    setVideoFiles(Array.from(e.target.files || []));
+  function handleImageChange(event) {
+    const files = Array.from(event.target.files || []);
+
+    if (files.length > 10) {
+      alert("You can upload up to 10 photos.");
+      event.target.value = "";
+      return;
+    }
+
+    setImageFiles(files);
+  }
+
+  async function getVideoDuration(file) {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      const url = URL.createObjectURL(file);
+
+      video.preload = "metadata";
+
+      video.onloadedmetadata = () => {
+        const duration = video.duration;
+        URL.revokeObjectURL(url);
+        resolve(duration);
+      };
+
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error(`Could not read ${file.name}.`));
+      };
+
+      video.src = url;
+    });
+  }
+
+  async function handleVideoChange(event) {
+    const files = Array.from(event.target.files || []);
+
+    if (files.length > 2) {
+      alert("You can upload up to 2 videos.");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      for (const file of files) {
+        const duration = await getVideoDuration(file);
+
+        if (duration > 30.5) {
+          alert(`${file.name} is longer than 30 seconds.`);
+          event.target.value = "";
+          setVideoFiles([]);
+          return;
+        }
+      }
+
+      setVideoFiles(files);
+    } catch (error) {
+      alert(error.message || "Could not check the selected video.");
+      event.target.value = "";
+    }
   }
 
   async function uploadFiles(files, bucket) {
     const urls = [];
 
-    for (const file of files) {
-      const cleanName = file.name.replace(/\s+/g, "-").toLowerCase();
-      const fileName = `${user.id}/${Date.now()}-${cleanName}`;
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      const cleanName = file.name
+        .replace(/[^a-zA-Z0-9._-]/g, "-")
+        .toLowerCase();
+
+      const fileName = `${user.id}/${Date.now()}-${index}-${cleanName}`;
 
       const { error } = await supabase.storage
         .from(bucket)
-        .upload(fileName, file);
+        .upload(fileName, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
 
       if (error) throw error;
 
@@ -111,92 +191,105 @@ setUser(user);
     return urls;
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  function validateForm() {
+    if (!title.trim()) return "Enter a build or bike name.";
+    if (!vehicle.trim()) return "Enter the year, make, and model.";
+    if (!vehicleType) return "Select a vehicle type.";
+    if (!category) return "Select a category.";
+    if (!description.trim()) return "Add a description.";
+    if (imageFiles.length === 0) return "Upload at least one photo.";
+
+    if (isMotorcycle) {
+      if (!bikeStory.trim()) return "Add the bike story.";
+      if (!tires.trim()) return "Add the bike tires.";
+      if (!bikeMods.trim()) return "Add the bike modifications.";
+    }
+
+    return null;
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
 
     if (!user) {
       window.location.href = "/login";
       return;
     }
 
-    if (!title || !vehicle || !vehicleType || !category || !description) {
-      alert("Fill out the required build basics first.");
-      return;
-    }
+    const validationError = validateForm();
 
-    if (imageFiles.length === 0) {
-      alert("Upload at least one photo.");
+    if (validationError) {
+      alert(validationError);
       return;
     }
 
     try {
       setIsSubmitting(true);
 
-      const uploadedImageUrls = await uploadFiles(imageFiles, "build-images");
-      const uploadedVideoUrls = await uploadFiles(videoFiles, "build-videos");
+      const uploadedImageUrls = await uploadFiles(
+        imageFiles,
+        "build-images"
+      );
 
-      const { data: post, error } = await supabase
+      const uploadedVideoUrls =
+        videoFiles.length > 0
+          ? await uploadFiles(videoFiles, "build-videos")
+          : [];
+
+      const postPayload = {
+        user_id: user.id,
+        title: title.trim(),
+        owner,
+        vehicle: vehicle.trim(),
+        vehicle_type: vehicleType,
+        category,
+        description: description.trim(),
+
+        image_url: uploadedImageUrls[0],
+        gallery_images: uploadedImageUrls,
+        gallery: uploadedImageUrls,
+
+        video_url: uploadedVideoUrls[0] || null,
+        videos: uploadedVideoUrls,
+
+        engine: isMotorcycle ? null : engine.trim() || null,
+        suspension: isMotorcycle ? null : suspension.trim() || null,
+        wheels: isMotorcycle ? null : wheels.trim() || null,
+        tires: tires.trim() || null,
+        interior: isMotorcycle ? null : interior.trim() || null,
+        exterior: isMotorcycle ? null : exterior.trim() || null,
+        performance: isMotorcycle ? null : performance.trim() || null,
+
+        bike_story: isMotorcycle ? bikeStory.trim() : null,
+        modifications: isMotorcycle ? bikeMods.trim() : null,
+
+        why_built: whyBuilt.trim() || null,
+        favorite_mod: favoriteMod.trim() || null,
+        future_plans: futurePlans.trim() || null,
+
+        status: "pending",
+        likes: 0,
+        views: 0,
+        average_rating: 0,
+        rating_count: 0,
+      };
+
+      const { error } = await supabase
         .from("posts")
-        .insert([
-          {
-            user_id: user.id,
-
-title,
-
-            title,
-        
-
-            owner: profile?.username ? `@${profile.username}` : user.email,
-            vehicle,
-            vehicle_type: vehicleType,
-            category,
-            description,
-
-            image_url: uploadedImageUrls[0],
-            gallery_images: uploadedImageUrls,
-            gallery: uploadedImageUrls,
-
-            video_url: uploadedVideoUrls[0] || null,
-            videos: uploadedVideoUrls,
-
-            engine,
-            suspension,
-            wheels,
-            tires,
-            interior,
-            exterior,
-            performance,
-            future_plans: futurePlans,
-            why_built: whyBuilt,
-            favorite_mod: favoriteMod,
-
-            status: "pending",
-            likes: 0,
-            views: 0,
-            average_rating: 0,
-            rating_count: 0,
-          },
-        ])
-        .select()
-        .single();
+        .insert(postPayload);
 
       if (error) throw error;
 
-      if (uploadedVideoUrls.length > 0 && post) {
-        const videoRows = uploadedVideoUrls.map((url) => ({
-          post_id: post.id,
-          type: "video",
-          url,
-        }));
+      alert(
+        isMotorcycle
+          ? "Bike submitted for review."
+          : "Build submitted for review."
+      );
 
-        await supabase.from("media").insert(videoRows);
-      }
-
-      alert("Build submitted for review.");
       window.location.href = "/";
-    } catch (err) {
-      console.log(err);
-      alert(err.message || "Something went wrong.");
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Something went wrong while submitting.");
     } finally {
       setIsSubmitting(false);
     }
@@ -212,11 +305,16 @@ title,
 
   if (!user) {
     return (
-      <main className="bg-black text-white min-h-screen flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-zinc-950 border border-white/10 rounded-3xl p-8">
-          <h1 className="text-4xl font-black mb-4">LOGIN REQUIRED</h1>
-          <p className="text-zinc-400 mb-8">
-            You need an account before submitting a build.
+      <main className="min-h-screen bg-black text-white flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-zinc-950 border border-white/10 rounded-3xl p-8">
+          <p className="text-orange-500 uppercase tracking-[0.3em] text-xs font-black">
+            DGD Submission
+          </p>
+
+          <h1 className="text-4xl font-black mt-3">LOGIN REQUIRED</h1>
+
+          <p className="text-zinc-400 mt-4 mb-8">
+            Create an account or sign in before submitting a build.
           </p>
 
           <a
@@ -231,131 +329,210 @@ title,
   }
 
   return (
-    <main className="bg-black text-white min-h-screen px-4 md:px-6 py-16 md:py-24">
+    <main className="min-h-screen bg-black text-white px-4 md:px-6 py-12 md:py-20">
       <div className="max-w-6xl mx-auto">
-        <a href="/" className="text-zinc-500 hover:text-white text-sm">
+        <a
+          href="/"
+          className="inline-flex text-zinc-500 hover:text-white text-sm"
+        >
           ← Back Home
         </a>
 
         <header className="mt-8 mb-10">
-          <p className="uppercase tracking-[0.35em] text-orange-500 text-xs font-black mb-3">
+          <p className="uppercase tracking-[0.35em] text-orange-500 text-xs font-black">
             DGD Submission
           </p>
 
-          <h1 className="text-5xl md:text-7xl font-black leading-none mb-4">
-            SUBMIT BUILD
+          <h1 className="text-5xl md:text-7xl font-black leading-none mt-3">
+            SUBMIT YOUR BUILD
           </h1>
 
-          <p className="text-zinc-400">
+          <p className="text-zinc-400 mt-4">
             Logged in as{" "}
-            <span className="text-orange-500 font-bold">
-              {profile?.username ? `@${profile.username}` : user.email}
-            </span>
+            <span className="text-orange-500 font-bold">{owner}</span>
           </p>
         </header>
 
-        <form
-          onSubmit={handleSubmit}
-          className="bg-zinc-950 border border-white/10 rounded-3xl p-5 md:p-8 space-y-10 shadow-2xl"
-        >
-          <FormSection title="Build Basics">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <FormSection
+            title={isMotorcycle ? "Bike Basics" : "Build Basics"}
+            subtitle="Start with the main information people will see."
+          >
             <div className="grid md:grid-cols-2 gap-4">
-              <input
-                className={inputClass}
-                placeholder="Build Name"
+              <Field
+                placeholder={isMotorcycle ? "Bike Name" : "Build Name"}
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(event) => setTitle(event.target.value)}
               />
 
-              <input
-                className={`${inputClass} opacity-60 cursor-not-allowed`}
-                placeholder="@Username"
+              <Field
                 value={owner}
                 disabled
+                className="opacity-60 cursor-not-allowed"
+                aria-label="Account username"
               />
             </div>
 
-            <input
-              className={inputClass}
-              placeholder="Vehicle, ex: 1999 BMW E36 / 2008 Silverado"
+            <Field
+              placeholder={
+                isMotorcycle
+                  ? "Year, make, and model — ex: 2021 Yamaha R6"
+                  : "Year, make, and model — ex: 1999 BMW E36"
+              }
               value={vehicle}
-              onChange={(e) => setVehicle(e.target.value)}
+              onChange={(event) => setVehicle(event.target.value)}
             />
 
             <div className="grid md:grid-cols-2 gap-4">
               <select
                 className={inputClass}
                 value={vehicleType}
-                onChange={(e) => {
-                  setVehicleType(e.target.value);
-                  setCategory("");
-                }}
+                onChange={handleVehicleTypeChange}
               >
                 <option value="">Select Vehicle Type</option>
                 <option value="Car">Car</option>
                 <option value="Truck">Truck</option>
+                <option value="Motorcycle">Motorcycle</option>
               </select>
 
               <select
                 className={inputClass}
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(event) => setCategory(event.target.value)}
+                disabled={!vehicleType}
               >
-                <option value="">Select Category</option>
+                <option value="">
+                  {vehicleType
+                    ? "Select Category"
+                    : "Choose Vehicle Type First"}
+                </option>
 
-                {vehicleType === "Car" && (
-                  <>
-                    <option value="Drift">Drift</option>
-                    <option value="Stanced">Stanced</option>
-                    <option value="Track">Track</option>
-                    <option value="Drag">Drag</option>
-                    <option value="OEM+">OEM+</option>
-                    <option value="Offroad">Offroad</option>
-                  </>
-                )}
-
-                {vehicleType === "Truck" && (
-                  <>
-                    <option value="Prerunner">Prerunner</option>
-                    <option value="Lifted">Lifted</option>
-                    <option value="Dropped">Dropped</option>
-                    <option value="Street">Street</option>
-                    <option value="Work/Tow">Work/Tow</option>
-                    <option value="Drag">Drag</option>
-                    <option value="OEM+">OEM+</option>
-                  </>
-                )}
+                {(vehicleCategories[vehicleType] || []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
               </select>
             </div>
 
             <textarea
-              className={`${inputClass} h-40 resize-none`}
-              placeholder="Full Build Description / Story"
+              className={`${inputClass} min-h-40 resize-y`}
+              placeholder={
+                isMotorcycle
+                  ? "Give everyone a quick overview of the bike..."
+                  : "Give everyone a quick overview of the build..."
+              }
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(event) => setDescription(event.target.value)}
             />
           </FormSection>
 
-          <FormSection title="Photos">
+          {isMotorcycle ? (
+            <FormSection
+              title="Bike Details"
+              subtitle="Motorcycle-specific story and specifications."
+            >
+              <textarea
+                className={`${inputClass} min-h-44 resize-y`}
+                placeholder="Bike Story — why you chose it, how the build started, and what makes it special"
+                value={bikeStory}
+                onChange={(event) => setBikeStory(event.target.value)}
+              />
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <Field
+                  placeholder="Tires"
+                  value={tires}
+                  onChange={(event) => setTires(event.target.value)}
+                />
+
+                <textarea
+                  className={`${inputClass} min-h-32 resize-y`}
+                  placeholder="Modifications"
+                  value={bikeMods}
+                  onChange={(event) => setBikeMods(event.target.value)}
+                />
+              </div>
+            </FormSection>
+          ) : (
+            <FormSection
+              title="Build Specs"
+              subtitle="Add the important parts of the setup."
+            >
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Field
+                  placeholder="Engine Setup"
+                  value={engine}
+                  onChange={(event) => setEngine(event.target.value)}
+                />
+
+                <Field
+                  placeholder="Suspension"
+                  value={suspension}
+                  onChange={(event) => setSuspension(event.target.value)}
+                />
+
+                <Field
+                  placeholder="Wheels"
+                  value={wheels}
+                  onChange={(event) => setWheels(event.target.value)}
+                />
+
+                <Field
+                  placeholder="Tires"
+                  value={tires}
+                  onChange={(event) => setTires(event.target.value)}
+                />
+
+                <Field
+                  placeholder="Interior"
+                  value={interior}
+                  onChange={(event) => setInterior(event.target.value)}
+                />
+
+                <Field
+                  placeholder="Exterior"
+                  value={exterior}
+                  onChange={(event) => setExterior(event.target.value)}
+                />
+
+                <Field
+                  placeholder="Performance"
+                  value={performance}
+                  onChange={(event) => setPerformance(event.target.value)}
+                />
+              </div>
+            </FormSection>
+          )}
+
+          <FormSection
+            title="Photos"
+            subtitle="Upload up to 10 photos. The first photo becomes the cover."
+          >
             <UploadBox
-              title="Upload Build Photos"
-              subtitle="Upload one or more photos. The first photo becomes the main image."
-              type="image"
+              title="Choose Build Photos"
+              subtitle={`${imageFiles.length}/10 photos selected`}
               accept="image/*"
               multiple
               onChange={handleImageChange}
+              buttonText="Choose Photos"
             />
 
             {imagePreviews.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {imagePreviews.map((src, index) => (
                   <div
                     key={src}
                     className="rounded-2xl overflow-hidden border border-white/10 bg-black"
                   >
-                    <img src={src} alt="" className="w-full h-40 object-cover" />
+                    <img
+                      src={src}
+                      alt={`Selected photo ${index + 1}`}
+                      className="w-full h-40 object-cover"
+                    />
+
                     <p className="text-xs text-zinc-500 p-3">
-                      {index === 0 ? "Main image" : `Photo ${index + 1}`}
+                      {index === 0 ? "Cover photo" : `Photo ${index + 1}`}
                     </p>
                   </div>
                 ))}
@@ -363,26 +540,34 @@ title,
             )}
           </FormSection>
 
-          <FormSection title="Videos">
+          <FormSection
+            title="Videos"
+            subtitle="Upload up to 2 videos. Each video must be 30 seconds or shorter."
+          >
             <UploadBox
-              title="Upload Build Videos"
-              subtitle="Walkaround, exhaust clip, rolling shot, or feature video."
-              type="video"
+              title="Choose Build Videos"
+              subtitle={`${videoFiles.length}/2 videos selected`}
               accept="video/mp4,video/webm,video/quicktime,video/*"
               multiple
               onChange={handleVideoChange}
+              buttonText="Choose Videos"
             />
 
             {videoPreviews.length > 0 && (
-              <div className="grid md:grid-cols-2 gap-4 mt-5">
+              <div className="grid md:grid-cols-2 gap-4">
                 {videoPreviews.map((src, index) => (
                   <div
                     key={src}
                     className="rounded-2xl overflow-hidden border border-orange-500/40 bg-black"
                   >
-                    <video src={src} controls className="w-full h-64 object-contain bg-black" />
+                    <video
+                      src={src}
+                      controls
+                      className="w-full h-64 object-contain bg-black"
+                    />
+
                     <p className="text-xs text-orange-500 p-3">
-                      Video {index + 1} selected
+                      Video {index + 1}
                     </p>
                   </div>
                 ))}
@@ -390,58 +575,54 @@ title,
             )}
           </FormSection>
 
-          <FormSection title="Build Story">
+          <FormSection
+            title={isMotorcycle ? "More About The Bike" : "Build Story"}
+            subtitle="Give the community more context about the project."
+          >
             <div className="grid md:grid-cols-3 gap-4">
-              <input
-                className={inputClass}
-                placeholder="Why they built it"
+              <Field
+                placeholder={
+                  isMotorcycle ? "Why you chose this bike" : "Why you built it"
+                }
                 value={whyBuilt}
-                onChange={(e) => setWhyBuilt(e.target.value)}
+                onChange={(event) => setWhyBuilt(event.target.value)}
               />
 
-              <input
-                className={inputClass}
-                placeholder="Favorite mod"
+              <Field
+                placeholder="Favorite modification"
                 value={favoriteMod}
-                onChange={(e) => setFavoriteMod(e.target.value)}
+                onChange={(event) => setFavoriteMod(event.target.value)}
               />
 
-              <input
-                className={inputClass}
+              <Field
                 placeholder="Future plans"
                 value={futurePlans}
-                onChange={(e) => setFuturePlans(e.target.value)}
+                onChange={(event) => setFuturePlans(event.target.value)}
               />
             </div>
           </FormSection>
 
-          <FormSection title="Build Specs">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <input className={inputClass} placeholder="Engine Setup" value={engine} onChange={(e) => setEngine(e.target.value)} />
-              <input className={inputClass} placeholder="Suspension" value={suspension} onChange={(e) => setSuspension(e.target.value)} />
-              <input className={inputClass} placeholder="Wheels" value={wheels} onChange={(e) => setWheels(e.target.value)} />
-              <input className={inputClass} placeholder="Tires" value={tires} onChange={(e) => setTires(e.target.value)} />
-              <input className={inputClass} placeholder="Interior" value={interior} onChange={(e) => setInterior(e.target.value)} />
-              <input className={inputClass} placeholder="Exterior" value={exterior} onChange={(e) => setExterior(e.target.value)} />
-              <input className={inputClass} placeholder="Performance" value={performance} onChange={(e) => setPerformance(e.target.value)} />
+          <div className="sticky bottom-3 z-20 bg-black/90 backdrop-blur border border-white/10 rounded-3xl p-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+              <a
+                href="/"
+                className="w-full sm:w-auto text-center border border-white/20 px-8 py-4 rounded-2xl uppercase font-black hover:bg-white hover:text-black transition"
+              >
+                Cancel
+              </a>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full sm:w-auto bg-orange-500 text-black px-10 py-4 rounded-2xl uppercase font-black hover:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting
+                  ? "Uploading..."
+                  : isMotorcycle
+                    ? "Submit Bike"
+                    : "Submit Build"}
+              </button>
             </div>
-          </FormSection>
-
-          <div className="flex flex-col sm:flex-row gap-4 pt-2">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full sm:w-auto bg-orange-500 text-black px-10 py-5 rounded-2xl uppercase font-black hover:bg-white transition disabled:opacity-50"
-            >
-              {isSubmitting ? "Uploading Build..." : "Submit Build"}
-            </button>
-
-            <a
-              href="/"
-              className="w-full sm:w-auto text-center border border-white/20 px-10 py-5 rounded-2xl uppercase font-black hover:bg-white hover:text-black transition"
-            >
-              Cancel
-            </a>
           </div>
         </form>
       </div>
@@ -449,18 +630,36 @@ title,
   );
 }
 
-function FormSection({ title, children }) {
+function Field({ className = "", ...props }) {
+  return <input className={`${inputClass} ${className}`} {...props} />;
+}
+
+function FormSection({ title, subtitle, children }) {
   return (
-    <section>
-      <p className="uppercase tracking-[0.35em] text-orange-500 text-xs md:text-sm font-black mb-5">
-        {title}
-      </p>
+    <section className="bg-zinc-950 border border-white/10 rounded-3xl p-5 md:p-8">
+      <div className="mb-6">
+        <p className="uppercase tracking-[0.35em] text-orange-500 text-xs md:text-sm font-black">
+          {title}
+        </p>
+
+        {subtitle && (
+          <p className="text-zinc-500 text-sm mt-2">{subtitle}</p>
+        )}
+      </div>
+
       <div className="space-y-4">{children}</div>
     </section>
   );
 }
 
-function UploadBox({ title, subtitle, type, accept, multiple, onChange }) {
+function UploadBox({
+  title,
+  subtitle,
+  accept,
+  multiple,
+  onChange,
+  buttonText,
+}) {
   return (
     <div className="bg-black border border-white/10 rounded-3xl p-6 hover:border-orange-500/50 transition">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
@@ -470,7 +669,8 @@ function UploadBox({ title, subtitle, type, accept, multiple, onChange }) {
         </div>
 
         <label className="cursor-pointer bg-zinc-900 border border-white/10 hover:border-orange-500 rounded-2xl px-6 py-4 text-sm font-black uppercase transition text-center">
-          {type === "video" ? "Choose Videos" : "Choose Photos"}
+          {buttonText}
+
           <input
             type="file"
             accept={accept}
