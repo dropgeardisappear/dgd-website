@@ -1,18 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  "https://gfufidjjiyroagmsreeg.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdWZpZGpqaXlyb2FnbXNyZWVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MTE2MzQsImV4cCI6MjA5NDI4NzYzNH0.PlczG3eNWaajNqFykoeijDAB_k_kPxTk1gjxR7DGAOE"
-);
+import { supabase } from "@/lib/supabase";
 
 export default function AdminPage() {
-  const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [approvingId, setApprovingId] = useState(null);
 
   async function loadPosts() {
     const { data, error } = await supabase
@@ -22,7 +17,7 @@ export default function AdminPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.log(error);
+      alert(error.message);
       setLoading(false);
       return;
     }
@@ -31,10 +26,90 @@ export default function AdminPage() {
     setLoading(false);
   }
 
-  async function approvePost(id) {
+  async function readResponse(response) {
+    const text = await response.text();
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(
+        `Server returned an invalid response. Status: ${response.status}`
+      );
+    }
+  }
+
+  async function approvePost(post) {
+    if (approvingId) return;
+
+    setApprovingId(post.id);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error(
+          "Your login session is invalid or expired."
+        );
+      }
+
+      const response = await fetch(
+        "/api/admin/approve-build",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            postId: post.id,
+          }),
+        }
+      );
+
+      const data = await readResponse(response);
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "The build could not be approved."
+        );
+      }
+
+      setPosts((items) =>
+        items.filter((item) => item.id !== post.id)
+      );
+
+      if (data.smsSent) {
+        alert("Build approved and SMS sent successfully.");
+      } else {
+        alert(
+          `Build approved and notification created. SMS was not sent: ${
+            data.smsReason || "SMS is unavailable."
+          }`
+        );
+      }
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "The build could not be approved."
+      );
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
+  async function rejectPost(id) {
+    const confirmDelete = confirm(
+      "Reject and delete this build?"
+    );
+
+    if (!confirmDelete) return;
+
     const { error } = await supabase
       .from("posts")
-      .update({ status: "approved" })
+      .delete()
       .eq("id", id);
 
     if (error) {
@@ -42,22 +117,9 @@ export default function AdminPage() {
       return;
     }
 
-    setPosts((items) => items.filter((item) => item.id !== id));
-  }
-
-  async function rejectPost(id) {
-    const confirmDelete = confirm("Reject and delete this build?");
-
-    if (!confirmDelete) return;
-
-    const { error } = await supabase.from("posts").delete().eq("id", id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setPosts((items) => items.filter((item) => item.id !== id));
+    setPosts((items) =>
+      items.filter((item) => item.id !== id)
+    );
   }
 
   useEffect(() => {
@@ -70,8 +132,6 @@ export default function AdminPage() {
         window.location.href = "/login";
         return;
       }
-
-      setUser(session.user);
 
       const { data: profile, error } = await supabase
         .from("profiles")
@@ -111,7 +171,10 @@ export default function AdminPage() {
   return (
     <main className="bg-black text-white min-h-screen px-6 py-20">
       <div className="max-w-6xl mx-auto">
-        <a href="/" className="text-gray-400 hover:text-white">
+        <a
+          href="/"
+          className="text-gray-400 hover:text-white"
+        >
           ← Back Home
         </a>
 
@@ -145,10 +208,17 @@ export default function AdminPage() {
                     {post.category}
                   </p>
 
-                  <h2 className="text-3xl font-black mb-2">{post.title}</h2>
+                  <h2 className="text-3xl font-black mb-2">
+                    {post.title}
+                  </h2>
 
-                  <p className="text-gray-400 mb-2">{post.vehicle}</p>
-                  <p className="text-gray-500 mb-6">{post.owner}</p>
+                  <p className="text-gray-400 mb-2">
+                    {post.vehicle}
+                  </p>
+
+                  <p className="text-gray-500 mb-6">
+                    {post.owner}
+                  </p>
 
                   <p className="text-gray-300 mb-6">
                     {post.description}
@@ -156,15 +226,21 @@ export default function AdminPage() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <button
-                      onClick={() => approvePost(post.id)}
-                      className="bg-orange-500 text-black font-black uppercase py-4 rounded-xl hover:bg-white transition"
+                      type="button"
+                      onClick={() => approvePost(post)}
+                      disabled={approvingId === post.id}
+                      className="bg-orange-500 text-black font-black uppercase py-4 rounded-xl hover:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Approve
+                      {approvingId === post.id
+                        ? "Approving..."
+                        : "Approve"}
                     </button>
 
                     <button
+                      type="button"
                       onClick={() => rejectPost(post.id)}
-                      className="border border-red-500 text-red-400 font-black uppercase py-4 rounded-xl hover:bg-red-500 hover:text-white transition"
+                      disabled={Boolean(approvingId)}
+                      className="border border-red-500 text-red-400 font-black uppercase py-4 rounded-xl hover:bg-red-500 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Reject
                     </button>

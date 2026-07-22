@@ -80,12 +80,12 @@ export default function AccountPage() {
         .from("avatars")
         .upload(avatarName, avatarFile);
 
-      if (error) {
-        alert("Error uploading profile picture");
-        console.log(error);
-        setSaving(false);
-        return;
-      }
+   if (error) {
+  alert("Error uploading profile picture");
+  console.error(error);
+  setSaving(false);
+  return;
+}
 
       const { data } = supabase.storage
         .from("avatars")

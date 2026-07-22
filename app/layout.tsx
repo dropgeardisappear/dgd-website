@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Drop Gear Disappear",
-  description: "A midnight garage community where the hardest trucks and cars get featured, rated, and remembered.",
+  description:
+    "A midnight garage community where the hardest trucks and cars get featured, rated, and remembered.",
 };
 
 export default function RootLayout({
@@ -23,11 +24,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-black text-white antialiased`}
+      >
+        {children}
+      </body>
     </html>
   );
 }

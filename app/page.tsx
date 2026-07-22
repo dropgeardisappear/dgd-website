@@ -1,5 +1,5 @@
 "use client";
-
+import NotificationBell from "@/components/notifications/NotificationBell";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -458,11 +458,40 @@ function Hero({ featuredPost }: { featuredPost?: Post }) {
 function NavLinks({ user, garageUsername }: any) {
   return (
     <>
-      <a href="#culture" className="transition hover:text-orange-500">Browse</a>
-      <a href="#trending" className="transition hover:text-orange-500">Builds</a>
-      <a href="#top-rated" className="transition hover:text-orange-500">Top Rated</a>
-      <a href="/submit" className="transition hover:text-orange-500">Submit Build</a>
-      {user && <a href="/notifications" className="transition hover:text-orange-500">Notifications</a>}
+      {user && (
+        <div className="mr-8 flex items-center">
+          <NotificationBell />
+        </div>
+      )}
+
+      <a
+        href="#culture"
+        className="transition hover:text-orange-500"
+      >
+        Browse
+      </a>
+
+      <a
+        href="#trending"
+        className="transition hover:text-orange-500"
+      >
+        Builds
+      </a>
+
+      <a
+        href="#top-rated"
+        className="transition hover:text-orange-500"
+      >
+        Top Rated
+      </a>
+
+      <a
+        href="/submit"
+        className="transition hover:text-orange-500"
+      >
+        Submit Build
+      </a>
+
       {user ? (
         <a
           href={garageUsername ? `/garage/${garageUsername}` : "/account"}
@@ -471,7 +500,12 @@ function NavLinks({ user, garageUsername }: any) {
           Garage
         </a>
       ) : (
-        <a href="/login" className="transition hover:text-orange-500">Login</a>
+        <a
+          href="/login"
+          className="transition hover:text-orange-500"
+        >
+          Login
+        </a>
       )}
     </>
   );
@@ -484,8 +518,14 @@ function MobileNavLinks({ user, garageUsername, closeMenu }: any) {
       <a onClick={closeMenu} href="#trending" className="block">Builds</a>
       <a onClick={closeMenu} href="#top-rated" className="block">Top Rated</a>
       <a onClick={closeMenu} href="/submit" className="block">Submit Build</a>
-      {user && <a onClick={closeMenu} href="/notifications" className="block">Notifications</a>}
-      {user ? (
+{user && (
+  <div
+    onClick={closeMenu}
+    className="py-2"
+  >
+    <NotificationBell />
+  </div>
+)}      {user ? (
         <a
           onClick={closeMenu}
           href={garageUsername ? `/garage/${garageUsername}` : "/account"}
@@ -668,72 +708,82 @@ function Footer({ user }: any) {
   return (
     <footer className="border-t border-white/10 bg-zinc-950 py-12">
       <div className="mx-auto flex max-w-7xl flex-col justify-between gap-10 px-4 md:flex-row md:px-6">
+
         <div>
           <a href="/">
-            <img src="/DGD 2 transparent.png" alt="DGD Logo" className="mb-4 h-9 w-auto" />
+            <img
+              src="/DGD 2 transparent.png"
+              alt="DGD Logo"
+              className="mb-4 h-9 w-auto"
+            />
           </a>
+
           <p className="max-w-md text-zinc-500">
-            Built After Dark. An online meet for cars, trucks, motorcycles, and the people who build them.
+            Built After Dark. An online meet for cars, trucks, motorcycles, and
+            the people who build them.
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 text-sm uppercase tracking-wide text-zinc-400 sm:grid-cols-3">
-          <div className="space-y-3">
-            <a href="#culture" className="block hover:text-white">Browse</a>
-            <a href="#trending" className="block hover:text-white">Builds</a>
-            <a href="#top-rated" className="block hover:text-white">Top Rated</a>
-          </div>
+        <div className="space-y-3">
+          <a href="/submit" className="block hover:text-white">
+            Submit Build
+          </a>
 
-          <div className="space-y-3">
-            <a href="/submit" className="block hover:text-white">Submit Build</a>
-            {user ? (
-              <a href="/account" className="block hover:text-white">Account</a>
-            ) : (
-              <a href="/login" className="block hover:text-white">Login</a>
-            )}
-            {user && <a href="/notifications" className="block hover:text-white">Notifications</a>}
-          </div>
+          {user ? (
+            <a href="/account" className="block hover:text-white">
+              Account
+            </a>
+          ) : (
+            <a href="/login" className="block hover:text-white">
+              Login
+            </a>
+          )}
 
-          <div className="space-y-3">
-            <a
-              href="https://instagram.com/dropgeardisappear.us"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block hover:text-white"
-            >
-              Instagram ↗
+          {user && (
+            <a href="/notifications" className="block hover:text-white">
+              Notifications
             </a>
-            <a
-              href="https://tiktok.com/@dropgeardisappear.us"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block hover:text-white"
-            >
-              TikTok ↗
-            </a>
-            <a
-              href="https://www.youtube.com/@vkspeedzzz"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block hover:text-white"
-            >
-              YouTube ↗
-            </a>
-          </div>
+          )}
+
+          <a href="/privacy" className="block hover:text-white">
+            Privacy Policy
+          </a>
+
+          <a href="/terms" className="block hover:text-white">
+            Terms of Service
+          </a>
         </div>
+
+        <div className="space-y-3">
+          <a
+            href="https://instagram.com/dropgeardisappear.us"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block hover:text-white"
+          >
+            Instagram ↗
+          </a>
+
+          <a
+            href="https://tiktok.com/@dropgeardisappear.us"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block hover:text-white"
+          >
+            TikTok ↗
+          </a>
+
+          <a
+            href="https://www.youtube.com/@vkspeedzzz"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block hover:text-white"
+          >
+            YouTube ↗
+          </a>
+        </div>
+
       </div>
     </footer>
   );
-}
-
-function getFilterLabel(vehicleFilter: string, selectedCategory: string, searchTerm: string) {
-  const parts: string[] = [];
-
-  if (vehicleFilter !== "All") {
-    parts.push(vehicleFilter === "Motorcycle" ? "Motorcycles" : `${vehicleFilter}s`);
-  }
-  if (selectedCategory !== "All") parts.push(selectedCategory);
-  if (searchTerm.trim()) parts.push(`Search: ${searchTerm.trim()}`);
-
-  return parts.length > 0 ? `Showing: ${parts.join(" • ")}` : "Showing all approved builds";
 }
