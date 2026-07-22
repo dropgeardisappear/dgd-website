@@ -51,6 +51,33 @@ const CAR_CATEGORIES = [
 ];
 
 const MOTORCYCLE_CATEGORIES = ["Dirt Bike", "Street Bike", "Custom"];
+function getFilterLabel(
+  vehicleFilter: string,
+  selectedCategory: string,
+  searchTerm: string
+) {
+  const parts: string[] = [];
+
+  if (vehicleFilter !== "All") {
+    parts.push(
+      vehicleFilter === "Motorcycle"
+        ? "Motorcycles"
+        : `${vehicleFilter}s`
+    );
+  }
+
+  if (selectedCategory !== "All") {
+    parts.push(selectedCategory);
+  }
+
+  if (searchTerm.trim()) {
+    parts.push(`Search: ${searchTerm.trim()}`);
+  }
+
+  return parts.length > 0
+    ? `Showing: ${parts.join(" • ")}`
+    : "Showing all approved builds";
+}
 
 export default function HomePage() {
   const [posts, setPosts] = useState<Post[]>([]);
