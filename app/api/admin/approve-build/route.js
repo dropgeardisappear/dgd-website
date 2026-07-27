@@ -4,7 +4,7 @@ import { createNotification } from "@/lib/notifications/createNotification";
 
 export const runtime = "nodejs";
 
-function requiredEnv(name) {
+function getRequiredEnv(name) {
   const value = process.env[name];
 
   if (!value) {
@@ -14,86 +14,122 @@ function requiredEnv(name) {
   return value;
 }
 
-const supabaseUrl = requiredEnv(
-  "NEXT_PUBLIC_SUPABASE_URL"
-);
-
-const supabaseAnonKey = requiredEnv(
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY"
-);
-
-const supabaseServiceRoleKey = requiredEnv(
-  "SUPABASE_SERVICE_ROLE_KEY"
-);
-
-const supabaseAdmin = createClient(
-  supabaseUrl,
-  supabaseServiceRoleKey,
-  {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  }
-);
+function createAdminClient() {
+  return createClient(
+    getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    }
+  );
+}
 
 export async function POST(request) {
   try {
-    const authHeader = request.headers.get("authorization");
+    const authorization = request.headers.get("authorization");
 
-    if (!authHeader?.startsWith("Bearer ")) {
+    if (!authorization?.startsWith("Bearer ")) {
       return NextResponse.json(
-        { error: "You must be signed in as an admin." },
+        { error: "You must be signed in." },
         { status: 401 }
       );
     }
 
-    const accessToken = authHeader.replace("Bearer ", "").trim();
+    const accessToken = authorization
+      .slice("Bearer ".length)
+      .trim();
 
-    const authClient = createClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      }
-    );
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: "Your login token is missing." },
+        { status: 401 }
+      );
+    }
 
+    const supabaseAdmin = createAdminClient();
+
+    // Verify the browser token against the same Supabase project.
     const {
       data: { user },
       error: userError,
-    } = await authClient.auth.getUser(accessToken);
+    } = await supabaseAdmin.auth.getUser(accessToken);
 
     if (userError || !user) {
+      console.error("Admin token verification failed:", userError);
+
       return NextResponse.json(
-        { error: "Your login session is invalid or expired." },
+        {
+          error:
+            "Your login session is invalid or expired. Sign out and back in.",
+        },
         { status: 401 }
       );
     }
 
-    const { data: profile, error: profileError } =
-      await supabaseAdmin
-        .from("profiles")
-        .select("is_admin")
-        .eq("id", user.id)
-        .single();
+    // Check the profile belonging to the authenticated user ID.
+    const {
+      data: profile,
+      error: profileError,
+    } = await supabaseAdmin
+      .from("profiles")
+      .select("id, username, is_admin")
+      .eq("id", user.id)
+      .maybeSingle();
 
-    if (profileError || !profile?.is_admin) {
+    if (profileError) {
+      console.error("Admin profile lookup failed:", {
+        userId: user.id,
+        email: user.email,
+        profileError,
+      });
+
       return NextResponse.json(
-        { error: "Admin access only." },
+        {
+          error: `Could not verify admin profile: ${profileError.message}`,
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!profile) {
+      console.error("Admin profile row missing:", {
+        userId: user.id,
+        email: user.email,
+      });
+
+      return NextResponse.json(
+        {
+          error:
+            "Your account does not have a matching profile row.",
+        },
+        { status: 403 }
+      );
+    }
+
+    if (profile.is_admin !== true) {
+      console.error("Admin permission denied:", {
+        userId: user.id,
+        email: user.email,
+        username: profile.username,
+        isAdmin: profile.is_admin,
+      });
+
+      return NextResponse.json(
+        {
+          error: `Admin access only. Signed in as ${
+            user.email || "unknown account"
+          }.`,
+        },
         { status: 403 }
       );
     }
 
     const body = await request.json();
-    const postId = String(body.postId || "").trim();
+    const postId = String(body?.postId || "").trim();
 
     if (!postId) {
       return NextResponse.json(
@@ -102,16 +138,27 @@ export async function POST(request) {
       );
     }
 
-    const { data: post, error: postError } =
-      await supabaseAdmin
-        .from("posts")
-        .select(
-          "id, title, user_id, created_by, status"
-        )
-        .eq("id", postId)
-        .single();
+    const {
+      data: post,
+      error: postError,
+    } = await supabaseAdmin
+      .from("posts")
+      .select("id, title, user_id, status")
+      .eq("id", postId)
+      .maybeSingle();
 
-    if (postError || !post) {
+    if (postError) {
+      console.error("Build lookup failed:", postError);
+
+      return NextResponse.json(
+        {
+          error: `Could not load the build: ${postError.message}`,
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!post) {
       return NextResponse.json(
         { error: "The build could not be found." },
         { status: 404 }
@@ -125,33 +172,25 @@ export async function POST(request) {
       );
     }
 
-    const recipientUserId =
-      post.user_id || post.created_by;
-
-    if (!recipientUserId) {
-      return NextResponse.json(
-        {
-          error:
-            "This build is not connected to a user account.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const { data: approvedPost, error: approvalError } =
-      await supabaseAdmin
-        .from("posts")
-        .update({
-          status: "approved",
-        })
-        .eq("id", post.id)
-        .eq("status", "pending")
-        .select("id")
-        .maybeSingle();
+    const {
+      data: approvedPost,
+      error: approvalError,
+    } = await supabaseAdmin
+      .from("posts")
+      .update({ status: "approved" })
+      .eq("id", post.id)
+      .eq("status", "pending")
+      .select("id, title, user_id, status")
+      .maybeSingle();
 
     if (approvalError) {
-      throw new Error(
-        `Could not approve build: ${approvalError.message}`
+      console.error("Build approval failed:", approvalError);
+
+      return NextResponse.json(
+        {
+          error: `Could not approve build: ${approvalError.message}`,
+        },
+        { status: 500 }
       );
     }
 
@@ -162,41 +201,58 @@ export async function POST(request) {
       );
     }
 
-    let notificationResult;
+    let smsSent = false;
+    let smsReason = "Notification was not attempted.";
 
-    try {
-      const buildTitle = post.title || "Your build";
+    // Notification failure should not undo approval.
+    if (approvedPost.user_id) {
+      try {
+        const notificationResult = await createNotification({
+          supabaseAdmin,
+          userId: approvedPost.user_id,
+          postId: approvedPost.id,
+          type: "build_approved",
+          message: `${
+            approvedPost.title || "Your build"
+          } was approved and is now live.`,
+          preferenceKey: "build_approved",
+          smsBody:
+            `DGD: Your build "${
+              approvedPost.title || "Your build"
+            }" was approved and is now live: ` +
+            `https://www.dropgeardisappear.us/build/${approvedPost.id}`,
+        });
 
-      notificationResult = await createNotification({
-        supabaseAdmin,
-        userId: recipientUserId,
-        postId: post.id,
-        type: "build_approved",
-        message: `${buildTitle} was approved and is now live.`,
-        preferenceKey: "build_approved",
-        smsBody:
-          `DGD: Your build "${buildTitle}" was approved and is now live: ` +
-          `https://dropgeardisappear.us/build/${post.id}`,
-      });
-    } catch (notificationError) {
-      await supabaseAdmin
-        .from("posts")
-        .update({
-          status: "pending",
-        })
-        .eq("id", post.id);
+        smsSent = Boolean(notificationResult?.smsSent);
+        smsReason =
+          notificationResult?.smsReason ||
+          (smsSent
+            ? "SMS accepted."
+            : "SMS was not sent.");
+      } catch (notificationError) {
+        console.error(
+          "Build approved, but notification failed:",
+          notificationError
+        );
 
-      throw notificationError;
+        smsReason =
+          notificationError instanceof Error
+            ? notificationError.message
+            : "Notification failed.";
+      }
+    } else {
+      smsReason =
+        "The build is not connected to a user account.";
     }
 
     return NextResponse.json({
       success: true,
-      postId: post.id,
-      smsSent: notificationResult.smsSent,
-      smsReason: notificationResult.smsReason,
- message: notificationResult.smsSent
-  ? "Build approved and SMS accepted by Twilio."
-  : "Build approved and notification created.",
+      postId: approvedPost.id,
+      smsSent,
+      smsReason,
+      message: smsSent
+        ? "Build approved and SMS accepted by Twilio."
+        : "Build approved successfully.",
     });
   } catch (error) {
     console.error("Approve-build route error:", error);
