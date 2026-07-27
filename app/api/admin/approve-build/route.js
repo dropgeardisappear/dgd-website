@@ -59,16 +59,15 @@ export async function POST(request) {
     } = await supabaseAdmin.auth.getUser(accessToken);
 
     if (userError || !user) {
-      console.error("Admin token verification failed:", userError);
+  console.error("getUser failed", userError);
 
-      return NextResponse.json(
-        {
-          error:
-            "Your login session is invalid or expired. Sign out and back in.",
-        },
-        { status: 401 }
-      );
-    }
+  return NextResponse.json(
+    {
+      error: userError?.message || "getUser failed",
+    },
+    { status: 401 }
+  );
+}
 
     // Check the profile belonging to the authenticated user ID.
     const {
