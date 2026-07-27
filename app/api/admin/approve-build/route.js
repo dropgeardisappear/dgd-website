@@ -120,9 +120,9 @@ export async function POST(request) {
 
       return NextResponse.json(
         {
-          error: `Admin access only. Signed in as ${
-            user.email || "unknown account"
-          }.`,
+        error: `ADMIN API V2: Access denied for ${
+  user.email || "unknown account"
+}. Profile admin value: ${String(profile?.is_admin)}`,
         },
         { status: 403 }
       );
