@@ -14,10 +14,10 @@ function getRequiredEnv(name) {
   return value;
 }
 
-function createAdminClient() {
+function createAuthClient() {
   return createClient(
     getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+    getRequiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
     {
       auth: {
         persistSession: false,
@@ -50,13 +50,13 @@ export async function POST(request) {
       );
     }
 
-    const supabaseAdmin = createAdminClient();
+   const authClient = createAuthClient();
+const supabaseAdmin = createAdminClient();
 
-    // Verify the browser token against the same Supabase project.
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(accessToken);
+const {
+  data: { user },
+  error: userError,
+} = await authClient.auth.getUser(accessToken);
 
     if (userError || !user) {
   console.error("getUser failed", userError);
