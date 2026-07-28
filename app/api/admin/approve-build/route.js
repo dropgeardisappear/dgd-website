@@ -28,6 +28,20 @@ function createAuthClient() {
   );
 }
 
+function createAdminClient() {
+  return createClient(
+    getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    }
+  );
+}
+
 export async function POST(request) {
   try {
     const authorization = request.headers.get("authorization");
@@ -50,7 +64,7 @@ export async function POST(request) {
       );
     }
 
-   const authClient = createAuthClient();
+const authClient = createAuthClient();
 const supabaseAdmin = createAdminClient();
 
 const {
