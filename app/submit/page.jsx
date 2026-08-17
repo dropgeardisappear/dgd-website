@@ -165,31 +165,40 @@ export default function SubmitPage() {
   }
 
   async function uploadFiles(files, bucket) {
-    const urls = [];
+  if (!files || files.length === 0) {
+    return [];
+  }
 
-    for (let index = 0; index < files.length; index += 1) {
-      const file = files[index];
-      const cleanName = file.name
-        .replace(/[^a-zA-Z0-9._-]/g, "-")
-        .toLowerCase();
+  const uploads = files.map(async (file, index) => {
+    const uploadFile =
+  bucket === "build-images"
+    ? await compressImage(file)
+    : file;
+    const cleanName = file.name
+      .replace(/[^a-zA-Z0-9.-]/g, "-")
+      .toLowerCase();
 
-      const fileName = `${user.id}/${Date.now()}-${index}-${cleanName}`;
+    const fileName = `${user.id}/${Date.now()}-${index}-${crypto.randomUUID()}-${cleanName}`;
 
-      const { error } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
+    const { error } = await supabase.storage
+      .from(bucket)
+.upload(fileName, uploadFile, {        cacheControl: "3600",
+        upsert: false,
+      });
 
-      if (error) throw error;
-
-      const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
-      urls.push(data.publicUrl);
+    if (error) {
+      throw error;
     }
 
-    return urls;
-  }
+    const { data } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
+  });
+
+  return Promise.all(uploads);
+}
 
   function validateForm() {
     if (!title.trim()) return "Enter a build or bike name.";
@@ -226,15 +235,10 @@ export default function SubmitPage() {
     try {
       setIsSubmitting(true);
 
-      const uploadedImageUrls = await uploadFiles(
-        imageFiles,
-        "build-images"
-      );
-
-      const uploadedVideoUrls =
-        videoFiles.length > 0
-          ? await uploadFiles(videoFiles, "build-videos")
-          : [];
+     const [uploadedImageUrls, uploadedVideoUrls] = await Promise.all([
+  uploadFiles(imageFiles, "build-images"),
+  uploadFiles(videoFiles, "build-videos"),
+]);
 
       const postPayload = {
         user_id: user.id,
