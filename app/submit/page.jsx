@@ -164,110 +164,140 @@ export default function SubmitPage() {
     }
   }
 
-  async function uploadFiles(files, bucket) {
+async function uploadFiles(files, bucket) {
   if (!files || files.length === 0) {
     return [];
   }
 
   const compressImage = async (file) => {
-  if (!file.type.startsWith("image/")) {
-    return file;
-  }
+    // Only attempt compression on images
+    if (!file.type.startsWith("image/")) {
+      return file;
+    }
 
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
+    try {
+      return await new Promise((resolve, reject) => {
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
 
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
+        img.onload = () => {
+          try {
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
 
-      const MAX_WIDTH = 1920;
-      const MAX_HEIGHT = 1920;
-
-      let width = img.width;
-      let height = img.height;
-
-      if (width > height) {
-        if (width > MAX_WIDTH) {
-          height = Math.round((height * MAX_WIDTH) / width);
-          width = MAX_WIDTH;
-        }
-      } else {
-        if (height > MAX_HEIGHT) {
-          width = Math.round((width * MAX_HEIGHT) / height);
-          height = MAX_HEIGHT;
-        }
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-
-      ctx.drawImage(img, 0, 0, width, height);
-
-      canvas.toBlob(
-        (blob) => {
-          URL.revokeObjectURL(objectUrl);
-
-          if (!blob) {
-            reject(new Error("Image compression failed"));
-            return;
-          }
-
-          const compressedFile = new File(
-            [blob],
-            file.name.replace(/\.[^/.]+$/, ".jpg"),
-            {
-              type: "image/jpeg",
-              lastModified: Date.now(),
+            if (!ctx) {
+              URL.revokeObjectURL(objectUrl);
+              reject(new Error("Canvas unavailable"));
+              return;
             }
-          );
 
-          resolve(compressedFile);
-        },
-        "image/jpeg",
-        0.82
+            const MAX_WIDTH = 1920;
+            const MAX_HEIGHT = 1920;
+
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height = Math.round((height * MAX_WIDTH) / width);
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width = Math.round((width * MAX_HEIGHT) / height);
+                height = MAX_HEIGHT;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob(
+              (blob) => {
+                URL.revokeObjectURL(objectUrl);
+
+                if (!blob) {
+                  reject(new Error("Compression failed"));
+                  return;
+                }
+
+                const originalName =
+                  file.name.replace(/\.[^/.]+$/, "") || "image";
+
+                const compressedFile = new File(
+                  [blob],
+                  `${originalName}.jpg`,
+                  {
+                    type: "image/jpeg",
+                    lastModified: Date.now(),
+                  }
+                );
+
+                resolve(compressedFile);
+              },
+              "image/jpeg",
+              0.82
+            );
+          } catch (error) {
+            URL.revokeObjectURL(objectUrl);
+            reject(error);
+          }
+        };
+
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error("Browser could not compress image"));
+        };
+
+        img.src = objectUrl;
+      });
+    } catch (error) {
+      // IMPORTANT:
+      // Compression failing will NOT stop the submission.
+      // It silently uses the original image instead.
+      console.warn(
+        `Could not compress ${file.name}. Uploading original instead.`,
+        error
       );
-    };
 
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("Could not load image"));
-    };
+      return file;
+    }
+  };
 
-    img.src = objectUrl;
+  const uploads = files.map(async (file, index) => {
+    const uploadFile =
+      bucket === "build-images"
+        ? await compressImage(file)
+        : file;
+
+    // Use the compressed file's name because it may now be a JPG.
+    const cleanName = uploadFile.name
+      .replace(/[^a-zA-Z0-9.-]/g, "-")
+      .toLowerCase();
+
+    const fileName =
+      `${user.id}/${Date.now()}-${index}-${crypto.randomUUID()}-${cleanName}`;
+
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, uploadFile, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: uploadFile.type,
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    const { data } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
   });
-};
-
- const uploads = files.map(async (file, index) => {
-  const uploadFile =
-    bucket === "build-images"
-      ? await compressImage(file)
-      : file;
-
-  const cleanName = file.name
-    .replace(/[^a-zA-Z0-9.-]/g, "-")
-    .toLowerCase();
-
-  const fileName = `${user.id}/${Date.now()}-${index}-${crypto.randomUUID()}-${cleanName}`;
-
-  const { error } = await supabase.storage
-    .from(bucket)
-    .upload(fileName, uploadFile, {
-      cacheControl: "3600",
-      upsert: false,
-    });
-
-  if (error) {
-    throw error;
-  }
-
-  const { data } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(fileName);
-
-  return data.publicUrl;
-});
 
   return Promise.all(uploads);
 }
