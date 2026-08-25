@@ -88,7 +88,7 @@ export default function HomePage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [featuredIndex, setFeaturedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
+
 
   async function checkUser() {
     const {
@@ -217,12 +217,10 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-black font-sans text-white">
-      <Navbar
-        user={user}
-        garageUsername={garageUsername}
-        menuOpen={menuOpen}
-        setMenuOpen={setMenuOpen}
-      />
+   <Navbar
+  user={user}
+  garageUsername={profile?.username}
+/>
 
       <Hero featuredPost={featuredPost} />
 
@@ -375,7 +373,9 @@ export default function HomePage() {
   );
 }
 
-function Navbar({ user, garageUsername, menuOpen, setMenuOpen }: any) {
+function Navbar({ user, garageUsername }: any) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
     <nav className="fixed top-0 z-50 w-full border-b border-white/10 bg-black/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-6">
@@ -393,7 +393,8 @@ function Navbar({ user, garageUsername, menuOpen, setMenuOpen }: any) {
 
         <button
           type="button"
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={() => setMenuOpen((open) => !open)}
+          aria-expanded={menuOpen}
           aria-label="Toggle navigation"
           className="rounded-xl border border-white/20 px-4 py-2 text-xl md:hidden"
         >
@@ -541,27 +542,62 @@ function NavLinks({ user, garageUsername }: any) {
 function MobileNavLinks({ user, garageUsername, closeMenu }: any) {
   return (
     <>
-      <a onClick={closeMenu} href="#culture" className="block">Browse</a>
-      <a onClick={closeMenu} href="#trending" className="block">Builds</a>
-      <a onClick={closeMenu} href="#top-rated" className="block">Top Rated</a>
-      <a onClick={closeMenu} href="/submit" className="block">Submit Build</a>
-{user && (
-  <div
-    onClick={closeMenu}
-    className="py-2"
-  >
-    <NotificationBell />
-  </div>
-)}      {user ? (
+      <a onClick={closeMenu} href="#culture" className="block">
+        Browse
+      </a>
+
+      <a onClick={closeMenu} href="#trending" className="block">
+        Builds
+      </a>
+
+      <a onClick={closeMenu} href="#top-rated" className="block">
+        Top Rated
+      </a>
+
+      <a onClick={closeMenu} href="/submit" className="block">
+        Submit Build
+      </a>
+
+      {user && (
         <a
           onClick={closeMenu}
-          href={garageUsername ? `/garage/${garageUsername}` : "/account"}
-          className="block text-orange-500"
+          href="/account/notifications"
+          className="block"
         >
-          Garage
+          Notifications
         </a>
+      )}
+
+      {user ? (
+        <>
+          <a
+            onClick={closeMenu}
+            href={
+              garageUsername
+                ? `/garage/${garageUsername}`
+                : "/account"
+            }
+            className="block text-orange-500"
+          >
+            Garage
+          </a>
+
+          <a
+            onClick={closeMenu}
+            href="/account"
+            className="block"
+          >
+            Account
+          </a>
+        </>
       ) : (
-        <a onClick={closeMenu} href="/login" className="block">Login</a>
+        <a
+          onClick={closeMenu}
+          href="/login"
+          className="block"
+        >
+          Login
+        </a>
       )}
     </>
   );

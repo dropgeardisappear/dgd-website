@@ -169,33 +169,105 @@ export default function SubmitPage() {
     return [];
   }
 
-  const uploads = files.map(async (file, index) => {
-    const uploadFile =
-  bucket === "build-images"
-    ? await compressImage(file)
-    : file;
-    const cleanName = file.name
-      .replace(/[^a-zA-Z0-9.-]/g, "-")
-      .toLowerCase();
+  const compressImage = async (file) => {
+  if (!file.type.startsWith("image/")) {
+    return file;
+  }
 
-    const fileName = `${user.id}/${Date.now()}-${index}-${crypto.randomUUID()}-${cleanName}`;
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
 
-    const { error } = await supabase.storage
-      .from(bucket)
-.upload(fileName, uploadFile, {        cacheControl: "3600",
-        upsert: false,
-      });
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
 
-    if (error) {
-      throw error;
-    }
+      const MAX_WIDTH = 1920;
+      const MAX_HEIGHT = 1920;
 
-    const { data } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(fileName);
+      let width = img.width;
+      let height = img.height;
 
-    return data.publicUrl;
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width = Math.round((width * MAX_HEIGHT) / height);
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          URL.revokeObjectURL(objectUrl);
+
+          if (!blob) {
+            reject(new Error("Image compression failed"));
+            return;
+          }
+
+          const compressedFile = new File(
+            [blob],
+            file.name.replace(/\.[^/.]+$/, ".jpg"),
+            {
+              type: "image/jpeg",
+              lastModified: Date.now(),
+            }
+          );
+
+          resolve(compressedFile);
+        },
+        "image/jpeg",
+        0.82
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Could not load image"));
+    };
+
+    img.src = objectUrl;
   });
+};
+
+ const uploads = files.map(async (file, index) => {
+  const uploadFile =
+    bucket === "build-images"
+      ? await compressImage(file)
+      : file;
+
+  const cleanName = file.name
+    .replace(/[^a-zA-Z0-9.-]/g, "-")
+    .toLowerCase();
+
+  const fileName = `${user.id}/${Date.now()}-${index}-${crypto.randomUUID()}-${cleanName}`;
+
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(fileName, uploadFile, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const { data } = supabase.storage
+    .from(bucket)
+    .getPublicUrl(fileName);
+
+  return data.publicUrl;
+});
 
   return Promise.all(uploads);
 }
