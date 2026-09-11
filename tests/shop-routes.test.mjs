@@ -22,6 +22,91 @@ function loadRoute(path, dependencies) {
   return module.exports;
 }
 
+test("checkout uses database prices and shipping and lets Stripe select payment methods", async () => {
+  const names = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "SUPABASE_SECRET_KEY", "SHOP_SITE_URL", "STRIPE_PAYMENT_METHOD_CONFIGURATION"];
+  const saved = names.map(name => process.env[name]);
+  const captured = [];
+  let quotedSubtotal = 2000;
+  let prior = null;
+  const session = { id: "cs_test_unit", currency: "usd", livemode: false, status: "open", payment_status: "unpaid", client_reference_id: "cart-unit", metadata: { dgd_cart_key: "cart-unit" }, url: "https://checkout.stripe.com/c/pay/cs_test_unit" };
+  const query = { eq: () => query, maybeSingle: async () => ({ data: prior, error: null }) };
+  const db = { from: () => ({ select: () => query }), rpc: async (name, input) => { captured.push({ name, input }); return { data: { stripe_session_id: "cs_test_unit" }, error: null }; } };
+  const product = { id: "product-unit", title: "DGD Logo Sticker", price_cents: 500, stock_quantity: 450, reserved_quantity: 0, weight_grams: 8, images: [] };
+  class TestStripe {
+    checkout = { sessions: {
+      create: async (input, options) => { captured.push({ checkout: input, options }); return session; },
+      retrieve: async () => session,
+      expire: async () => { captured.push({ expire: true }); session.status = "expired"; },
+    } };
+  }
+  const payments = loadRoute("../lib/shop/payments.ts", {
+    "server-only": {}, stripe: TestStripe, "node:crypto": require("node:crypto"), resend: {}, "./validation": validation,
+    "./catalog": { getShopSettings: async () => ({ store_open: true, tax_mode: "no_tax", shipping_countries: ["US"] }), getProductRows: async () => [product] },
+    "./cart": { readCart: async () => ({ key: "cart-unit", lines: [{ productId: product.id, quantity: 4 }] }), renewCart: async () => captured.push({ renew: true }) },
+    "./shipping": { quoteShipping: async lines => { assert.deepEqual(lines, [{ productId: product.id, quantity: 4 }]); return { subtotal_cents: quotedSubtotal, shipping_cents: 300, method: "stamped_letters", envelope_count: 2 }; } },
+    "./supabase-server": { paymentDatabase: () => db, ShopUnavailableError: class extends Error {}, CartUpdateError: class extends Error {} },
+  });
+  try {
+    process.env.STRIPE_SECRET_KEY = "sk_test_unit_test_only";
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_unit_test_only";
+    process.env.SUPABASE_SECRET_KEY = "unit_test_only";
+    process.env.SHOP_SITE_URL = "https://dgd.test";
+    process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION = "pmc_unit_test";
+    const url = await payments.createCheckout(new Request("https://dgd.test/api/shop/checkout", { method: "POST", body: JSON.stringify({ price: 1, shipping: 0 }) }));
+    assert.equal(url, "https://checkout.stripe.com/c/pay/cs_test_unit");
+    const checkout = captured[0].checkout;
+    assert.equal(checkout.line_items[0].price_data.unit_amount, 500);
+    assert.equal(checkout.line_items[0].quantity, 4);
+    assert.equal(checkout.shipping_options[0].shipping_rate_data.fixed_amount.amount, 300);
+    assert.match(checkout.shipping_options[0].shipping_rate_data.display_name, /no tracking/);
+    assert.deepEqual(checkout.shipping_address_collection.allowed_countries, ["US"]);
+    assert.equal(checkout.payment_method_types, undefined);
+    assert.equal(checkout.payment_method_configuration, "pmc_unit_test");
+    assert.match(checkout.integration_identifier, /^dgd_shop_[a-z]{8}$/);
+    assert.equal(captured[1].name, "shop_reserve_order");
+    assert.equal(captured[1].input.p_shipping_cents, 300);
+    assert.equal(captured[1].input.p_items[0].unit_price_cents, 500);
+    quotedSubtotal = 1999;
+    await assert.rejects(payments.createCheckout(new Request("https://dgd.test/api/shop/checkout")), /price changed/);
+    assert.equal(captured.length, 2, "A stale quote must stop before creating a session");
+    quotedSubtotal = 2000;
+    prior = { id: "order-unit", cart_key: "cart-unit", stripe_session_id: session.id, status: "pending", livemode: false, subtotal_cents: 2000, shipping_cents: 300, shipping_details: { method: "stamped_letters" } };
+    assert.equal(await payments.createCheckout(new Request("https://dgd.test/api/shop/checkout")), session.url);
+    assert.equal(captured.length, 2, "An unchanged pending checkout is reused");
+    prior.shipping_cents = 150;
+    await assert.rejects(payments.createCheckout(new Request("https://dgd.test/api/shop/checkout")), /Prices or shipping changed/);
+    assert.deepEqual(captured.slice(2).map(action => action.expire ? "expire" : action.renew ? "renew" : action.input.p_state), ["expire", "expired", "renew"]);
+  } finally {
+    names.forEach((name, index) => { if (saved[index] === undefined) delete process.env[name]; else process.env[name] = saved[index]; });
+  }
+});
+
+test("failed payments require retrieved confirmation and can recover without the webhook", async () => {
+  const previousKey = process.env.STRIPE_SECRET_KEY;
+  const settled = [];
+  const session = { id: "cs_test_unit", currency: "usd", livemode: false, client_reference_id: "cart-unit", metadata: { dgd_cart_key: "cart-unit" }, payment_status: "unpaid", status: "complete", payment_intent: { id: "pi_unit", status: "processing" } };
+  const query = { eq: () => query, maybeSingle: async () => ({ data: { id: "order-unit", cart_key: "cart-unit", livemode: false }, error: null }) };
+  const db = { from: () => ({ select: () => query }), rpc: async (_name, input) => { settled.push(input.p_state); return { data: "order-unit", error: null }; } };
+  class TestStripe { checkout = { sessions: { retrieve: async () => session } }; }
+  const payments = loadRoute("../lib/shop/payments.ts", {
+    "server-only": {}, stripe: TestStripe, "node:crypto": require("node:crypto"), resend: {}, "./catalog": {}, "./cart": {}, "./shipping": {}, "./validation": validation,
+    "./supabase-server": { paymentDatabase: () => db, ShopUnavailableError: class extends Error {}, CartUpdateError: class extends Error {} },
+  });
+  try {
+    process.env.STRIPE_SECRET_KEY = "sk_test_unit_test_only";
+    await assert.rejects(payments.syncSession(session.id, false, true), /not been confirmed/);
+    assert.deepEqual(settled, []);
+    session.payment_intent.status = "requires_payment_method";
+    await payments.syncSession(session.id, false);
+    assert.deepEqual(settled, ["failed"]);
+    session.payment_status = "paid";
+    await payments.syncSession(session.id, false, true);
+    assert.deepEqual(settled, ["failed", "paid"], "Current paid state wins over a stale failure event");
+  } finally {
+    if (previousKey === undefined) delete process.env.STRIPE_SECRET_KEY; else process.env.STRIPE_SECRET_KEY = previousKey;
+  }
+});
+
 test("checkout rejects cross-origin requests before creating a payment", async () => {
   let calls = 0;
   const route = loadRoute("../app/api/shop/checkout/route.ts", {
@@ -115,7 +200,7 @@ test("payment reconciliation records an earlier refund and rejects mismatched se
   }
   const payments = loadRoute("../lib/shop/payments.ts", {
     "server-only": {}, stripe: TestStripe, "node:crypto": require("node:crypto"), resend: {},
-    "./catalog": {}, "./cart": {}, "./validation": validation,
+    "./catalog": {}, "./cart": {}, "./shipping": {}, "./validation": validation,
     "./supabase-server": { paymentDatabase: () => db, ShopUnavailableError: class extends Error {}, CartUpdateError: class extends Error {} },
   });
   try {
@@ -139,6 +224,7 @@ test("a returning cart can use its own reservation and recover a paid confirmati
   const row = { id: "product-unit", price_cents: 500, stock_quantity: 2, reserved_quantity: 2 };
   const cart = loadRoute("../lib/shop/cart.ts", {
     "server-only": {}, "node:crypto": require("node:crypto"), "next/headers": {}, "./validation": validation,
+    "./shipping": { quoteShipping: async () => ({ subtotal_cents: 1000, shipping_cents: 150, method: "stamped_letters", envelope_count: 1 }) },
     "./catalog": { getProductRows: async () => [row], toProduct: () => ({ title: "Sticker", handle: "sticker", availableForSale: false, featuredImage: null }) },
     "./supabase-server": { paymentDatabase: () => db, ShopUnavailableError: class extends Error {}, CartUpdateError: class extends Error {} },
   });
@@ -148,6 +234,9 @@ test("a returning cart can use its own reservation and recover a paid confirmati
     const input = { key: "cart-unit", lines: [{ productId: "product-unit", quantity: 2 }] };
     const returning = await cart.publicCart(input);
     assert.equal(returning.lines[0].merchandise.availableForSale, true);
+    assert.equal(returning.cost.subtotalAmount.amount, "10.00");
+    assert.equal(returning.shipping.amount.amount, "1.50");
+    assert.equal(returning.cost.totalAmount.amount, "11.50");
     record.status = "paid";
     assert.equal((await cart.publicCart(input)).confirmationUrl, "/shop/complete?session_id=cs_live_unit");
   } finally {
@@ -168,7 +257,7 @@ test("cart edits verify expiration and stop when payment wins the race", async (
     checkout = { sessions: { expire: async () => { actions.push("expire request"); if (paid) throw new Error("Already complete"); }, retrieve: async () => session() } };
   }
   const payments = loadRoute("../lib/shop/payments.ts", {
-    "server-only": {}, stripe: TestStripe, "node:crypto": require("node:crypto"), resend: {}, "./catalog": {}, "./validation": validation,
+    "server-only": {}, stripe: TestStripe, "node:crypto": require("node:crypto"), resend: {}, "./catalog": {}, "./shipping": {}, "./validation": validation,
     "./cart": { readCart: async () => ({ key: "cart-unit", lines: [] }), renewCart: async () => actions.push("renew cart") },
     "./supabase-server": { paymentDatabase: () => db, ShopUnavailableError: class extends Error {}, CartUpdateError: class extends Error {} },
   });

@@ -80,9 +80,12 @@ export default function CartPage() {
       <aside className={styles.orderSummary} aria-labelledby="order-summary-title">
         <h2 id="order-summary-title">Order summary</h2>
         <div className={styles.summaryRow}><span>Subtotal · {cart.totalQuantity} {cart.totalQuantity === 1 ? "item" : "items"}</span><strong>{formatMoney(cart.cost.subtotalAmount)}</strong></div>
-        <p className={styles.purchaseNote}>Shipping and applicable taxes are shown at checkout. Your final total is confirmed before payment.</p>
+        {cart.shipping && <><div className={styles.summaryRow}><span>Shipping</span><strong>{formatMoney(cart.shipping.amount)}</strong></div><p className={styles.purchaseNote}>{cart.shipping.label}{cart.shipping.envelopeCount > 1 && <> · {cart.shipping.envelopeCount} envelopes</>}</p></>}
+        {cart.shippingError && <p className={styles.error} role="alert">{cart.shippingError}</p>}
+        {cart.shipping && <div className={styles.summaryRow}><span>Total before tax</span><strong>{formatMoney(cart.cost.totalAmount)}</strong></div>}
+        <p className={styles.purchaseNote}>Applicable taxes and your final total are confirmed before payment.</p>
         {!enabled && <p className={styles.purchaseNote}>Checkout is not open yet. Your cart is saved.</p>}
-        <button type="button" className={styles.primaryButton} disabled={locked || !enabled || cart.lines.some((line) => !line.merchandise.availableForSale)} onClick={checkout}>{checkingOut ? "Opening checkout…" : "Checkout"}<ArrowRight size={18} aria-hidden="true" /></button>
+        <button type="button" className={styles.primaryButton} disabled={locked || !enabled || !cart.shipping || cart.lines.some((line) => !line.merchandise.availableForSale)} onClick={checkout}>{checkingOut ? "Opening checkout…" : "Checkout"}<ArrowRight size={18} aria-hidden="true" /></button>
         <p className={styles.secureNote}><LockKeyhole size={14} aria-hidden="true" /> Secure checkout. No DGD account required.</p>
       </aside>
     </div>

@@ -12,7 +12,7 @@ begin
   assert owner_id is not null, 'An existing owner must have shop access';
   perform set_config('dgd.test_owner',owner_id::text,true);
   perform set_config('request.jwt.claims','{"role":"service_role"}',true);
-  update public.shop_settings set store_open=true,support_email='shop-test@example.invalid',shipping_flat_cents=100,
+  update public.shop_settings set store_open=true,support_email='shop-test@example.invalid',shipping_flat_cents=100,shipping_mode='flat',free_shipping_over_cents=null,
     tax_mode='no_tax',shipping_policy='Test fixture',refund_policy='Test fixture' where id=1;
   insert into public.shop_products(handle,title,status,price_cents,stock_quantity,weight_grams,images)
     values('test-'||suffix,'Fixture','active',500,3,10,'[{"url":"/dgd-logo-sticker.png"}]') returning id into product;

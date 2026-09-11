@@ -16,9 +16,9 @@ export async function POST(request: Request) {
   try { event = stripeClient().webhooks.constructEvent(raw, signature, secret); }
   catch { return NextResponse.json({ error: "Invalid signature." }, { status: 400 }); }
   try {
-    if (["checkout.session.completed", "checkout.session.expired", "checkout.session.async_payment_succeeded"].includes(event.type)) {
+    if (["checkout.session.completed", "checkout.session.expired", "checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed"].includes(event.type)) {
       const session = event.data.object as Stripe.Checkout.Session;
-      if (session.metadata?.dgd_cart_key) await syncSession(session.id);
+      if (session.metadata?.dgd_cart_key) await syncSession(session.id, true, event.type === "checkout.session.async_payment_failed");
     } else if (event.type === "charge.refunded") {
       await syncRefund((event.data.object as Stripe.Charge).id);
     }

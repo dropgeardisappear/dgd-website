@@ -7,6 +7,7 @@ import { readCart, renewCart } from "./cart";
 import { CartUpdateError, paymentDatabase, ShopUnavailableError } from "./supabase-server";
 import { validateCheckoutUrl } from "./validation";
 import type { ShopOrder } from "./database-types";
+import { quoteShipping } from "./shipping";
 
 export function paymentSetup() {
   const database = Boolean(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -47,7 +48,12 @@ async function ownerOrderEmail(orderId: string) {
   if (saved.error) throw new Error("Could not save notification state.");
 }
 
-export async function syncSession(sessionId: string, notify = true) {
+function failedSession(session: Stripe.Checkout.Session) {
+  const intent = typeof session.payment_intent === "object" ? session.payment_intent : null;
+  return session.payment_status !== "paid" && session.status === "complete" && Boolean(intent && ["requires_payment_method", "canceled"].includes(intent.status));
+}
+
+export async function syncSession(sessionId: string, notify = true, paymentFailed = false) {
   const stripe = stripeClient();
   const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["payment_intent.latest_charge"] });
   const db = paymentDatabase();
@@ -56,7 +62,8 @@ export async function syncSession(sessionId: string, notify = true) {
   const order = lookup.data as ShopOrder | null;
   if (!order) return null; // Other checkouts in this Stripe account are not DGD orders.
   if (session.livemode !== order.livemode || session.client_reference_id !== order.cart_key || session.metadata?.dgd_cart_key !== order.cart_key || session.currency !== "usd") throw new Error("Payment does not match the order.");
-  const state = session.payment_status === "paid" ? "paid" : session.status === "expired" ? "expired" : null;
+  const state = session.payment_status === "paid" ? "paid" : session.status === "expired" ? "expired" : failedSession(session) ? "failed" : null;
+  if (paymentFailed && !state) throw new Error("Payment failure has not been confirmed yet.");
   if (state) {
     const shipping = session.collected_information?.shipping_details;
     const settled = await db.rpc("shop_settle_order", {
@@ -93,10 +100,20 @@ export async function syncRefund(chargeId: string) {
 
 async function existingCheckout(order: ShopOrder) {
   const session = await syncSession(order.stripe_session_id, false);
-  if (session?.status === "open" && session.url) return validateCheckoutUrl(session.url);
   const cart = await readCart();
-  if (cart && cart.key === order.cart_key && session?.status === "expired") await renewCart(cart);
+  if (session?.status === "open" && session.url) {
+    if (!cart || cart.key !== order.cart_key) throw new CartUpdateError("Your cart changed. Refresh before continuing.");
+    const quote = await quoteShipping(cart.lines);
+    if (quote.subtotal_cents !== order.subtotal_cents || quote.shipping_cents !== order.shipping_cents || quote.method !== order.shipping_details?.method || JSON.stringify(quote.packing) !== JSON.stringify(order.shipping_details?.packing)) {
+      await releaseCheckoutForCartEdit();
+      throw new CartUpdateError("Prices or shipping changed. Review your cart and press Checkout again.");
+    }
+    return validateCheckoutUrl(session.url);
+  }
+  if (cart && cart.key === order.cart_key && session && (session.status === "expired" || failedSession(session))) await renewCart(cart);
   if (session?.payment_status === "paid") throw new CartUpdateError("This order is already paid. Check your confirmation before placing another order.");
+  if (session && failedSession(session)) throw new CartUpdateError("Your payment did not go through. Review your cart and press Checkout to try again.");
+  if (session?.status === "complete") throw new CartUpdateError("Your payment is still processing. Check your order confirmation before trying again.");
   throw new CartUpdateError("Your previous checkout expired. Review your cart and press Checkout again.");
 }
 
@@ -112,7 +129,7 @@ export async function releaseCheckoutForCartEdit() {
     // current state before releasing stock or changing the cart identity.
     await stripeClient().checkout.sessions.expire(prior.data.stripe_session_id).catch(() => undefined);
     const session = await syncSession(prior.data.stripe_session_id, false);
-    if (session?.status === "expired") { await renewCart(cart); return; }
+    if (session && (session.status === "expired" || failedSession(session))) { await renewCart(cart); return; }
     if (session?.payment_status !== "paid") throw new ShopUnavailableError("Checkout could not be closed yet. Please try again.");
   }
   throw new CartUpdateError("This order is already paid. Open your order confirmation before starting a new cart.");
@@ -138,15 +155,18 @@ export async function createCheckout(request: Request) {
   });
   const subtotal = items.reduce((sum, item) => sum + item.product.price_cents! * item.quantity, 0);
   if (subtotal > 99999999) throw new CartUpdateError("This order is too large.");
-  const shipping = settings.free_shipping_over_cents !== null && subtotal >= settings.free_shipping_over_cents ? 0 : settings.shipping_flat_cents;
-  if (shipping === null || settings.tax_mode === "unconfigured" || !settings.shipping_countries.every(country => /^[A-Z]{2}$/.test(country))) throw new ShopUnavailableError("Shipping is not available yet.");
+  const quote = await quoteShipping(cart.lines);
+  if (quote.subtotal_cents !== subtotal) throw new CartUpdateError("An item price changed. Refresh your cart.");
+  const shipping = quote.shipping_cents;
+  if (settings.tax_mode === "unconfigured" || !settings.shipping_countries.every(country => /^[A-Z]{2}$/.test(country)) || (quote.method === "stamped_letters" && settings.shipping_countries.join(",") !== "US")) throw new ShopUnavailableError("Shipping is not available yet.");
   const base = siteOrigin();
   // A stable time window makes retries idempotent while limiting unpaid stock
   // reservations to 30–40 minutes. A DB lock also deduplicates across windows.
   const timeWindow = Math.floor(Date.now() / 600000);
   const fingerprint = createHash("sha256").update(JSON.stringify({ items: items.map(item => [item.product.id, item.quantity, item.product.price_cents, item.product.updated_at]), shipping, tax: settings.tax_mode, countries: settings.shipping_countries, base })).digest("hex").slice(0, 32);
   const session = await stripe.checkout.sessions.create({
-    mode: "payment", payment_method_types: ["card"], client_reference_id: cart.key,
+    mode: "payment", integration_identifier: "dgd_shop_jxqvmzpk", client_reference_id: cart.key,
+    ...(process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION ? { payment_method_configuration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION } : {}),
     metadata: { dgd_cart_key: cart.key }, payment_intent_data: { metadata: { dgd_cart_key: cart.key } },
     line_items: items.map(({ product, quantity }) => ({ quantity, price_data: {
       currency: "usd", unit_amount: product.price_cents!, tax_behavior: "exclusive",
@@ -155,7 +175,7 @@ export async function createCheckout(request: Request) {
       },
     } })),
     shipping_address_collection: { allowed_countries: settings.shipping_countries as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[] },
-    shipping_options: [{ shipping_rate_data: { type: "fixed_amount", display_name: shipping === 0 ? "Free shipping" : "Standard shipping", fixed_amount: { amount: shipping, currency: "usd" }, tax_behavior: "exclusive" } }],
+    shipping_options: [{ shipping_rate_data: { type: "fixed_amount", display_name: quote.method === "stamped_letters" ? "USPS stamped mail (no tracking)" : shipping === 0 ? "Free shipping" : "Standard shipping", fixed_amount: { amount: shipping, currency: "usd" }, tax_behavior: "exclusive" } }],
     automatic_tax: { enabled: settings.tax_mode === "stripe_tax" },
     success_url: `${base}/shop/complete?session_id={CHECKOUT_SESSION_ID}`, cancel_url: `${base}/shop/cart`,
     expires_at: (timeWindow + 1) * 600 + 1800,

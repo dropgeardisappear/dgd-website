@@ -5,6 +5,7 @@ import { getProductRows, toProduct } from "./catalog";
 import { CartUpdateError, paymentDatabase, ShopUnavailableError } from "./supabase-server";
 import { parseCart, type CartData } from "./validation";
 import type { ShopCart } from "./types";
+import { quoteShipping } from "./shipping";
 
 const CART_COOKIE = process.env.NODE_ENV === "production" ? "__Host-dgd-cart-v2" : "dgd-cart-v2";
 
@@ -51,7 +52,15 @@ export async function publicCart(cart: CartData | null): Promise<ShopCart | null
     } };
   });
   const total = { amount: (subtotal / 100).toFixed(2), currencyCode: "USD" };
-  return { lines, totalQuantity: lines.reduce((sum, line) => sum + line.quantity, 0), cost: { subtotalAmount: total, totalAmount: total }, ...(confirmationUrl ? { confirmationUrl } : {}) };
+  let shipping: ShopCart["shipping"], shippingError: string | undefined;
+  let totalWithShipping = total;
+  try {
+    const quote = await quoteShipping(cart.lines);
+    if (quote.subtotal_cents !== subtotal) throw new CartUpdateError("An item price changed. Refresh your cart.");
+    shipping = { amount: { amount: (quote.shipping_cents / 100).toFixed(2), currencyCode: "USD" }, label: quote.method === "stamped_letters" ? "U.S. stamped mail · no tracking" : "Shipping", envelopeCount: quote.envelope_count };
+    totalWithShipping = { amount: ((subtotal + quote.shipping_cents) / 100).toFixed(2), currencyCode: "USD" };
+  } catch (error) { shippingError = error instanceof Error ? error.message : "Shipping could not be calculated."; }
+  return { lines, totalQuantity: lines.reduce((sum, line) => sum + line.quantity, 0), cost: { subtotalAmount: total, totalAmount: totalWithShipping }, shipping, shippingError, ...(confirmationUrl ? { confirmationUrl } : {}) };
 }
 
 export async function mutateCart(action: "add" | "update" | "remove", input: { merchandiseId?: string; lineId?: string; quantity?: number }) {

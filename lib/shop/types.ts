@@ -34,6 +34,8 @@ export type CartLine = {
 };
 export type ShopCart = {
   confirmationUrl?: string;
+  shipping?: { amount: Money; label: string; envelopeCount: number };
+  shippingError?: string;
   totalQuantity: number;
   lines: CartLine[];
   cost: { subtotalAmount: Money; totalAmount: Money };

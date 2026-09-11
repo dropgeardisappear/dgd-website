@@ -12,6 +12,7 @@ type Props = { product: ShopProductRow | null; onClose: () => void; onSaved: () 
 export default function ProductEditor({ product, onClose, onSaved }: Props) {
   const [form, setForm] = useState({ title: product?.title || "", handle: product?.handle || "", description: product?.description || "", category: product?.category || "Stickers", status: product?.status || "draft", price: product?.price_cents ? (product.price_cents / 100).toFixed(2) : "", stock: String(product?.stock_quantity ?? 0), sku: product?.sku || "", weight: product?.weight_grams ? String(product.weight_grams) : "", dimensions: product?.dimensions || "", material: product?.material || "", finish: product?.finish || "", application_care: product?.application_care || "" });
   const [images, setImages] = useState<ProductImage[]>(product?.images || []);
+  const [shipsAsLetter, setShipsAsLetter] = useState(product?.ships_as_letter || false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -46,10 +47,12 @@ export default function ProductEditor({ product, onClose, onSaved }: Props) {
       const stock = Number(form.stock), weight = form.weight ? Number(form.weight) : null;
       if (!Number.isInteger(stock) || stock < 0 || stock > 1000000) throw new Error("Enter a whole stock quantity.");
       if (weight !== null && (!Number.isInteger(weight) || weight < 1 || weight > 100000)) throw new Error("Enter the packed weight in whole grams.");
+      if (shipsAsLetter && (!weight || weight > 28)) throw new Error("Stamped-letter items need a packed weight between 1 and 28 grams.");
       if (form.status === "active" && (!price || !weight || !images.length)) throw new Error("Add a price, packed weight, and at least one photo before publishing.");
       const values = { title: form.title.trim(), handle: form.handle.trim() || slug(form.title), description: form.description.trim(), category: form.category.trim() || "Goods", status: form.status, price_cents: price, stock_quantity: stock, sku: form.sku.trim(), weight_grams: weight, dimensions: form.dimensions.trim(), material: form.material.trim(), finish: form.finish.trim(), application_care: form.application_care.trim(), images };
       if (!values.title || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(values.handle)) throw new Error("Enter a title and a URL name using letters, numbers, and hyphens.");
-      const query = product ? supabase.from("shop_products").update(values).eq("id", product.id).eq("updated_at", product.updated_at) : supabase.from("shop_products").insert(values);
+      const productValues = { ...values, ships_as_letter: shipsAsLetter };
+      const query = product ? supabase.from("shop_products").update(productValues).eq("id", product.id).eq("updated_at", product.updated_at) : supabase.from("shop_products").insert(productValues);
       const result = await query.select("id").maybeSingle();
       if (result.error?.code === "23505") throw new Error("That URL name is already in use. Choose another.");
       if (result.error?.code === "23514") throw new Error("Check the product details. Stock on hand cannot be lower than reserved stock.");
@@ -87,7 +90,8 @@ export default function ProductEditor({ product, onClose, onSaved }: Props) {
             <label className={s.field}>Price (USD)<input inputMode="decimal" value={form.price} onChange={event => field("price", event.target.value)} placeholder="0.00" required={form.status === "active"} /></label>
             <label className={s.field}>Stock on hand<input type="number" inputMode="numeric" min={product?.reserved_quantity || 0} max={1000000} step={1} required value={form.stock} onChange={event => field("stock", event.target.value)} /><small>{product?.reserved_quantity || 0} reserved in unpaid checkouts. Enter all units you currently have, including reserved units.</small></label>
             <label className={s.field}>SKU (optional)<input value={form.sku} maxLength={80} onChange={event => field("sku", event.target.value)} /></label>
-            <label className={s.field}>Packed weight (grams)<input type="number" inputMode="numeric" min={1} max={100000} step={1} value={form.weight} onChange={event => field("weight", event.target.value)} required={form.status === "active"} /><small>Include the sticker and its packaging.</small></label>
+            <label className={s.field}>Packed weight (grams)<input type="number" inputMode="numeric" min={1} max={100000} step={1} value={form.weight} onChange={event => field("weight", event.target.value)} required={form.status === "active"} /><small>Weigh one item with its packaging. Shipping estimates count this weight for every unit.</small></label>
+            <label className={s.checkbox}><input type="checkbox" checked={shipsAsLetter} onChange={event => setShipsAsLetter(event.target.checked)} /><span>Fits a regular, flexible paper envelope</span></label><p className={s.help}>Use this only for items that meet USPS letter size, thickness, and flexibility rules. Our stamped-mail option accepts up to 28g per packed item. Other products need a different shipping setup.</p>
           </div></section>
         </div>
       </div>
