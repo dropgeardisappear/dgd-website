@@ -177,7 +177,8 @@ export async function createCheckout(request: Request) {
     shipping_address_collection: { allowed_countries: settings.shipping_countries as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[] },
     shipping_options: [{ shipping_rate_data: { type: "fixed_amount", display_name: quote.method === "stamped_letters" ? "USPS stamped mail (no tracking)" : shipping === 0 ? "Free shipping" : "Standard shipping", fixed_amount: { amount: shipping, currency: "usd" }, tax_behavior: "exclusive" } }],
     automatic_tax: { enabled: settings.tax_mode === "stripe_tax" },
-    success_url: `${base}/shop/complete?session_id={CHECKOUT_SESSION_ID}`, cancel_url: `${base}/shop/cart`,
+success_url: `https://dropgeardisappear.us/shop/complete?session_id={CHECKOUT_SESSION_ID}`,
+cancel_url: `https://dropgeardisappear.us/shop/cart`,
     expires_at: (timeWindow + 1) * 600 + 1800,
   }, { idempotencyKey: `dgd-${cart.key}-${livemode}-${timeWindow}-${fingerprint}` });
   if (session.livemode !== livemode || !session.url) throw new ShopUnavailableError("Checkout is temporarily unavailable.");
