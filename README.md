@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## DGD shop
+
+The shop lives at `/shop` and uses Shopify for product management and checkout. See [the setup guide](docs/shop-setup.md) for the one-time connection, adding products and specs, and the pre-launch checks. Until Shopify is configured, the sticker is displayed as coming soon and purchases are disabled.
+
 ## Getting Started
 
 First, run the development server:

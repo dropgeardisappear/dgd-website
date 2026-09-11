@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Menu, UserRound, X } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import { supabase } from "@/lib/supabase";
+import CartLink from "@/components/shop/CartLink";
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
@@ -89,6 +90,8 @@ export default function Navbar() {
           <Link href="/submit" style={navLinkStyle}>
             Submit Build
           </Link>
+
+          <Link href="/shop" style={navLinkStyle}>Shop</Link>
         </nav>
 
         <div
@@ -99,6 +102,7 @@ export default function Navbar() {
           }}
         >
           {user && <NotificationBell />}
+          <CartLink />
 
           <Link
             href={user ? "/account" : "/login"}
@@ -178,6 +182,8 @@ export default function Navbar() {
           >
             Submit Build
           </Link>
+
+          <Link href="/shop" onClick={() => setMenuOpen(false)} style={mobileNavLinkStyle}>Shop</Link>
         </nav>
       )}
 
