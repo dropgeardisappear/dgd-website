@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## DGD shop
+
+The shop lives at `/shop`, with a protected product and order dashboard at `/admin/shop`. Supabase stores the catalog and orders; Stripe hosts checkout. See [the setup guide](docs/shop-setup.md) for setup and adding products without code changes. The existing DGD sticker is listed at $5 with 450 units, 3.31 × 7.50 inch dimensions, and an 8 gram packed weight. U.S. stamped shipping is $1.50 per envelope for up to three eligible stickers, with shipping shown in the cart. Checkout stays closed until payment credentials and store policies are configured. Fresh databases start with a private product draft.
+
 ## Getting Started
 
 First, run the development server:
