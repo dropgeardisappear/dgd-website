@@ -48,6 +48,7 @@ export default function CartPage() {
 
   if (loading) return <p className={styles.statusPanel} role="status">Loading your cart…</p>;
   if (loadError) return <div className={styles.statusPanel}><h2>Let’s get your cart back.</h2><p role="alert">{loadError}</p><button type="button" onClick={refresh} className={styles.secondaryButton}>Try again</button></div>;
+  if (cart?.confirmationUrl) return <div className={styles.emptyCart}><h2>Your order is paid.</h2><p>Open your order confirmation before starting a new cart.</p><Link href={cart.confirmationUrl} className={styles.primaryButton}>View order confirmation <ArrowRight size={18} /></Link></div>;
   if (!cart?.lines.length) return <div className={styles.emptyCart}><ShoppingBag size={42} aria-hidden="true" /><h2>Your cart is empty.</h2><p>{enabled ? "Find something for your build, toolbox, or everyday rotation." : "DGD goods are coming soon."}</p><Link href="/shop" className={styles.primaryButton}>Explore the shop <ArrowRight size={18} /></Link></div>;
 
   const locked = busy || checkingOut;
@@ -63,7 +64,7 @@ export default function CartPage() {
           <div className={styles.cartLineBody}>
             <div className={styles.cartLineTop}><h2><Link href={`/shop/${line.merchandise.product.handle}`}>{line.merchandise.product.title}</Link></h2><strong>{formatMoney(line.cost.totalAmount)}</strong></div>
             {line.merchandise.title !== "Default Title" && <p>{line.merchandise.title}</p>}
-            {!line.merchandise.availableForSale && <p className={styles.error}>No longer available. Remove this item to check out.</p>}
+            {!line.merchandise.availableForSale && <p className={styles.error}>This quantity is unavailable. Reduce it or remove the item.</p>}
             <div className={styles.cartLineActions}>
               <div className={styles.quantity} role="group" aria-label={`Quantity for ${line.merchandise.product.title}`}>
                 <button type="button" aria-label={`Decrease ${line.merchandise.product.title} quantity`} disabled={locked || line.quantity <= 1} onClick={() => update(line.id, line.quantity - 1)}><Minus size={16} /></button>
@@ -79,7 +80,8 @@ export default function CartPage() {
       <aside className={styles.orderSummary} aria-labelledby="order-summary-title">
         <h2 id="order-summary-title">Order summary</h2>
         <div className={styles.summaryRow}><span>Subtotal · {cart.totalQuantity} {cart.totalQuantity === 1 ? "item" : "items"}</span><strong>{formatMoney(cart.cost.subtotalAmount)}</strong></div>
-        <p className={styles.purchaseNote}>Shipping, discounts, and applicable taxes are shown at checkout. Your final total is confirmed before payment.</p>
+        <p className={styles.purchaseNote}>Shipping and applicable taxes are shown at checkout. Your final total is confirmed before payment.</p>
+        {!enabled && <p className={styles.purchaseNote}>Checkout is not open yet. Your cart is saved.</p>}
         <button type="button" className={styles.primaryButton} disabled={locked || !enabled || cart.lines.some((line) => !line.merchandise.availableForSale)} onClick={checkout}>{checkingOut ? "Opening checkout…" : "Checkout"}<ArrowRight size={18} aria-hidden="true" /></button>
         <p className={styles.secureNote}><LockKeyhole size={14} aria-hidden="true" /> Secure checkout. No DGD account required.</p>
       </aside>

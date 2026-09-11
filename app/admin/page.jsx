@@ -218,6 +218,7 @@ export default function AdminPage() {
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div>
             <a href="/" className="text-sm text-zinc-500 hover:text-white">← Back Home</a>
+            <a href="/admin/shop" className="ml-6 inline-block py-3 text-sm font-bold text-orange-400 hover:text-orange-300">Manage shop →</a>
             <p className="mt-8 text-xs font-black uppercase tracking-[0.35em] text-orange-500">DGD Moderation</p>
             <h1 className="mt-3 text-5xl font-black md:text-7xl">ADMIN APPROVAL</h1>
             <p className="mt-4 text-zinc-400">

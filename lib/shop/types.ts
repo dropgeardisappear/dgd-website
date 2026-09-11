@@ -33,6 +33,7 @@ export type CartLine = {
   merchandise: Variant & { product: { title: string; handle: string } };
 };
 export type ShopCart = {
+  confirmationUrl?: string;
   totalQuantity: number;
   lines: CartLine[];
   cost: { subtotalAmount: Money; totalAmount: Money };

@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 import { assertSameOrigin, ShopInputError } from "@/lib/shop/validation";
-import { buyerIP, CartUpdateError, getCheckoutUrl } from "@/lib/shop/shopify";
+import { CartUpdateError } from "@/lib/shop/supabase-server";
+import { createCheckout } from "@/lib/shop/payments";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   const headers = { "Cache-Control": "private, no-store" };
   try {
     assertSameOrigin(request);
-    // Prices, quantities, and checkout destination come from Shopify, never the browser.
-    const checkoutUrl = await getCheckoutUrl(buyerIP(request));
+    // Product prices are loaded on the server; inventory is reserved atomically.
+    const checkoutUrl = await createCheckout(request);
     return NextResponse.json({ checkoutUrl }, { headers });
   } catch (error) {
     const expected = error instanceof ShopInputError || error instanceof CartUpdateError;

@@ -18,11 +18,11 @@ export default function ProductDetail({ product, featured = false }: { product: 
   const [imageIndex, setImageIndex] = useState(0);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const { change, busy } = useCart();
+  const { change, busy, enabled, loading } = useCart();
   const variant = product.variants.nodes.find((item) => item.selectedOptions.every((option) => options[option.name] === option.value));
   const gallery = product.images.nodes.length ? product.images.nodes : product.featuredImage ? [product.featuredImage] : [];
   const activeImage = gallery[imageIndex] || variant?.image || product.featuredImage;
-  const purchasable = variant?.availableForSale && !product.requiresSellingPlan;
+  const purchasable = enabled && variant?.availableForSale && !product.requiresSellingPlan;
   const details = product.metafields.filter((field) => field?.value);
   const Heading = featured ? "h2" : "h1";
 
@@ -65,7 +65,7 @@ export default function ProductDetail({ product, featured = false }: { product: 
             setImageIndex(index < 0 ? 0 : index);
           }}>{value}</button>)}</div>
         </fieldset>)}
-        <p className={styles.availability}>{product.requiresSellingPlan ? "This item is not available through this shop." : !variant ? "This combination is unavailable." : variant.availableForSale ? "Available" : "Sold out"}</p>
+        <p className={styles.availability}>{loading ? "Checking availability…" : !enabled ? "Coming soon" : product.requiresSellingPlan ? "This item is not available through this shop." : !variant ? "This combination is unavailable." : variant.availableForSale ? "Available" : "Sold out"}</p>
         <div className={styles.purchaseRow}>
           <div className={styles.quantity} role="group" aria-label="Quantity">
             <button type="button" aria-label="Decrease quantity" disabled={quantity <= 1 || busy || !purchasable} onClick={() => setQuantity(quantity - 1)}><Minus size={16} /></button>

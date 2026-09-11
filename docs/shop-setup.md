@@ -1,86 +1,118 @@
 # DGD shop setup
 
-This branch adds `/shop`, product pages, a persistent cart, and a Shopify Checkout handoff to the existing Next.js/Vercel website. Supabase continues to power the community. Product management, inventory, payments, order notifications, and fulfillment are handled in Shopify after setup.
+The existing Next.js site keeps its community and adds a shop at `/shop`, a persistent cart, Stripe-hosted checkout, and an owner dashboard at `/admin/shop`. Supabase stores products, stock, settings, and orders. Adding or editing a product does not require another deployment. Both the storefront and dashboard have desktop and mobile layouts.
 
-**Status:** the code is an integration draft. It does not create a Shopify account, subscribe to a plan, connect a bank account, or enable live payments. Without Shopify credentials, the shop displays the supplied DGD sticker as “Coming soon” with purchasing disabled. It never invents a product price, stock count, material, or shipping promise. No changes to Supabase are required.
+There is no Shopify dependency or subscription. Stripe processing fees and any hosting, database, email, or optional Stripe Tax charges still apply. This is a focused merchandise shop, not a complete replacement for every Shopify feature.
 
-## 1. Connect a Shopify store
+## 1. Database and owner access
 
-Use a Shopify plan that supports the Headless channel and the required commerce features. Confirm plan cost before subscribing. The owner completes Shopify Payments identity and bank setup directly with Shopify; do not put bank information or private credentials into GitHub or chat.
+Migration `supabase/migrations/20260911043240_dgd_shop_catalog_and_payments.sql` has been applied to the existing DGD project. It adds isolated shop tables and a public `shop-product-images` bucket. It does not change the community tables or their policies. Apply it once when setting up a separate database; do not rerun it in the DGD project, where it is already recorded in migration history.
 
-1. Install Shopify's **Headless** sales channel and create a storefront for DGD. Use the Storefront API integration, not the Buy Button channel. Shopify documents that Buy Button does not support Apple Pay.
-2. Give the storefront access to product listings and cart/checkout operations (`unauthenticated_read_product_listings`, `unauthenticated_read_checkouts`, and `unauthenticated_write_checkouts`, as available in the Headless permissions screen).
-3. Find the store's original `your-store.myshopify.com` domain and its **private Storefront API token**. This is not an Admin API token or a public Storefront token.
-4. Add these values to Vercel's project environment variables, scoped to the intended preview/production environments:
+Existing administrators are copied once into `shop_admins`. Later changes to a member's profile cannot grant shop access. Additional shop owners must be added to that table by a database administrator using a verified existing auth user ID. Do not expose shop membership writes to browsers.
 
-   | Variable | Value |
-   | --- | --- |
-   | `SHOPIFY_STORE_DOMAIN` | `your-store.myshopify.com`, without a protocol or path |
-   | `SHOPIFY_STOREFRONT_PRIVATE_TOKEN` | Private token from the Headless storefront |
-   | `SHOPIFY_STOREFRONT_API_VERSION` | `2026-07` |
-   | `SHOPIFY_CHECKOUT_DOMAIN` | Optional exact hostname when Shopify uses a custom checkout domain |
+Sign in with the existing owner account and open `/admin/shop` (also linked from the moderation dashboard). Product and settings writes are protected by database row-level security. Order details are visible only to shop owners and the payment server. Customers can check a limited confirmation using their original browser's cart cookie and Stripe session ID; that endpoint does not expose their address or email.
 
-5. Redeploy the relevant Vercel environment after changing environment variables. Keep all existing Supabase, Twilio, and Resend variables.
+Supabase's advisor flags `shop_is_admin` and `shop_mark_shipped` as authenticated-callable security-definer functions. That access is intentional: the first checks protected membership, and the second checks that membership before updating fulfillment. The database tests verify a non-owner cannot use the shipping operation. Payment RPCs are restricted to the server role. [Advisor explanation](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable).
 
-For local work, copy the relevant variable names from `.env.example` into `.env.local` and enter the values there. Never commit `.env.local`. The private token and full cart ID stay on the server. The cart cookie is HttpOnly, SameSite=Lax, and Secure on production builds. The browser receives only cart merchandise and totals.
+The seeded **DGD Logo Sticker** is a private draft. The supplied PNG is retained unchanged at `public/dgd-logo-sticker.png`. Price, dimensions, material, packed weight, and available quantity have not been assumed. Until an active product exists, the public shop shows the approved coming-soon sticker design.
 
-## 2. Create the sticker listing
+## 2. Connect Stripe securely
 
-In Shopify **Products → Add product**:
+The owner completes Stripe business, identity, and bank setup directly in Stripe. Keep private keys out of chat and GitHub. Start with Stripe test credentials.
 
-- Title: **DGD Logo Sticker** (editable).
-- Main photo: `public/dgd-logo-sticker.png`, copied from the supplied PNG without altering the artwork or QR code.
-- Description: enter the actual product description. Descriptions display as plain text in this first version.
-- Set the real selling price, SKU, and quantity available to ship. Do not infer available inventory from a past purchase order.
-- Mark it as a physical product. Enter the packed weight and configure shipping separately.
-- Enable inventory tracking; disable **Continue selling when out of stock** unless intentionally taking preorders.
-- Add size/color variants only when they exist.
-- Set the product to **Active** and publish it to the DGD **Headless** sales channel and intended market/catalog. A product that is not published there will not appear on DGD.
+Add these environment variables to the intended Vercel project and environment, then redeploy:
 
-The shop queries Shopify on page load, so published products and edits appear without another code change or deployment. One product gets a large featured layout; multiple products get a grid. Catalog pages show 24 products with pagination. Product variants and cart lines are fetched across pages. The image gallery shows the first ten product images. Subscription products requiring a selling plan are intentionally unavailable in this physical-merchandise shop.
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Existing project's URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Existing public anon or publishable key |
+| `SUPABASE_SECRET_KEY` | Server secret key for that same project; alternatively use `SUPABASE_SERVICE_ROLE_KEY` for a legacy service-role key |
+| `STRIPE_SECRET_KEY` | Stripe test secret key initially; the server creates and retrieves Checkout Sessions and retrieves charges |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret for this environment's Stripe webhook endpoint |
+| `SHOP_SITE_URL` | Optional full site origin; otherwise returns use this deployment's `VERCEL_URL` |
+| `RESEND_API_KEY` | Optional owner email alerts; retain existing community configuration |
+| `SHOP_FROM_EMAIL` | Optional verified Resend sender, such as `DGD <orders@your-domain>` |
 
-## 3. Add specs without changing code
+Never prefix server secrets with `NEXT_PUBLIC_`. The browser never receives the Stripe or Supabase server key. Missing payment keys disable checkout without breaking the build or community. Existing Twilio and Resend routes also initialize their optional clients only when called.
 
-Create optional product metafield definitions in Shopify's custom data settings. Give the definitions Storefront **PUBLIC_READ** access and use plain text fields. Empty fields are hidden.
+Create a Stripe webhook pointing to `https://YOUR-DEPLOYMENT/api/shop/webhook`, using API version **2026-08-26.dahlia** (matching Stripe SDK 22.6.2), with these events:
 
-| Namespace and key | Suggested field type | Display label |
-| --- | --- | --- |
-| `custom.dimensions` | Single-line text | Dimensions |
-| `custom.material` | Single-line text | Material |
-| `custom.finish` | Single-line text | Finish |
-| `custom.application_care` | Multi-line text | Application & care |
+- `checkout.session.completed`
+- `checkout.session.expired`
+- `checkout.session.async_payment_succeeded`
+- `charge.refunded`
 
-Only state waterproof, UV resistance, outdoor lifespan, and similar claims if the sticker manufacturer confirms them. Price and specs are not hardcoded into the DGD source.
+The endpoint must be reachable by Stripe; Vercel preview login protection can block it. Choose an appropriate reachable test deployment and verify delivery. This code does not change deployment access settings. Test and live endpoints have separate signing secrets. Do not send live events to a test environment.
 
-## 4. Configure checkout and order handling
+Card details are entered on Stripe's hosted page. Apple Pay and Google Pay are offered on eligible devices and browsers with supported wallet and account configuration. A wallet is not guaranteed to appear for every customer. Enable and verify the desired payment methods in Stripe. No public Stripe key is needed for this hosted redirect integration.
 
-- In Shopify **Settings → Payments**, configure the supported payment provider and enable Apple Pay and Google Pay where available. Wallet buttons depend on merchant configuration and the buyer's device/browser/wallet. Card entry is handled in Shopify Checkout.
-- Allow guest checkout. DGD community accounts are separate; this integration does not synchronize Shopify customer accounts or order history into Supabase.
-- Configure selling regions, shipping rates, packaging, processing times, and applicable tax settings in Shopify. Verify the final shipping and tax calculation with test orders.
-- Add real shipping and refund policies. The shop footer links to the policies published in Shopify. Review DGD's existing privacy and terms pages for the new commerce flow before launch; this change does not rewrite those policies.
-- Set up customer order confirmations and owner new-order notifications in Shopify. Add tracking when fulfilling orders. Actual notifications and payment statuses are owned by Shopify, not a browser redirect or this website's existing email endpoint.
-- Discounts are entered in Shopify Checkout. Create discount codes in Shopify; no discount input is duplicated in the DGD cart.
-- The cart shows an estimated subtotal. Shopify recalculates availability, discounts, shipping, taxes, and the final total before payment. Adding to cart does not reserve stock.
+## 3. Add and publish merchandise
 
-## 5. Verify before going live
+In **Manage shop → Products**, edit the sticker draft or choose **Add product**:
 
-Use a development store or the payment provider's test mode for payment tests. This task does not place orders or enable live charging.
+1. Enter the title, URL handle, description, category, real USD price, and optional SKU.
+2. Enter physical units currently available and the packed weight in grams. Reserved units are shown separately; do not subtract them again from physical stock.
+3. Add confirmed dimensions, material, finish, and application/care details. Empty specs are hidden. Do not claim waterproofing or UV resistance unless verified with the manufacturer.
+4. Upload up to ten JPG, PNG, or WebP images, up to 5 MB each. Choose the main image. The seeded sticker image already works on the site; uploading it through the dashboard also makes it available as a photo in hosted checkout.
+5. Save as **Draft**, **Published**, or **Archived**. Published products require a price of at least $0.50, packed weight, and a photo. Set quantity to zero to show sold out, or archive to remove a product from the catalog.
 
-1. Publish a test product to the Headless channel and confirm its description, image, specs, currency, and real price appear in the preview.
-2. Edit its price in Shopify and refresh DGD; verify the edit appears without a code deployment.
-3. Add an item, change quantity, navigate back to the shop, reload, and remove it. Check on a phone and desktop.
-4. Confirm sold-out variants cannot be purchased. Also reduce inventory in Shopify while an item is in the cart and verify checkout's final stock check.
-5. Complete a test card checkout. Check shipping, tax, discounts, order status, buyer receipt, owner alert, and fulfillment. Test cancelling checkout and returning to the saved cart.
-6. Verify Apple Pay/Google Pay on supported devices under the provider's supported wallet-testing procedure. They are not validated just because their settings are enabled.
-7. Review customer-facing policies and support contact details, then merge and deploy only after setup and verification are complete.
+Images use a public product-photo bucket, including uploaded draft photos. Do not upload confidential documents. Removing a photo from a listing does not immediately delete the original storage object. Draft product rows remain private.
 
-Local automated checks: `node --test tests/shop-validation.test.mjs` and `npm run build` (with the site's required environment variables). The new tests cover quantity/identifier validation, request size and origin checks, and allowed checkout destinations. Live Shopify requests and payments still require merchant setup and integration testing.
+The storefront reads Supabase on each visit: one product gets the featured layout; multiple products get a grid with pagination. A stale editor will ask you to refresh if another edit or stock reservation changed that product, preventing an old form from overwriting current inventory.
+
+This version supports one USD price/SKU per product. Different sizes or designs can be separate products. A variant editor, discount codes, subscriptions, shipping-label purchases, customer order history, and automatic tracking emails are not included.
+
+## 4. Shipping, taxes, and opening the store
+
+In **Manage shop → Settings**, enter the support email, a flat shipping amount, an optional free-shipping threshold, allowed country codes, and real shipping/return policies. The draft country value is `US`; confirm your selling area before opening. Packed weight is recorded for fulfillment; this first version does not calculate carrier rates from weight.
+
+Choose either Stripe Tax (requires merchant setup and can add fees) or no tax collection only if appropriate for your business. This code does not determine where you must register or collect tax. Review the site's privacy and terms pages for the added commerce flow.
+
+The dashboard shows whether payment environment variables are present; that check does not verify their validity or merchant activation. After completing test setup, enable **Open checkout**. A visible test banner identifies test payment mode. Keep checkout closed until you intend to accept orders in that environment. Because preview and production use the same database, product/settings edits affect both; payment credentials remain environment-specific.
+
+Configure customer receipts in Stripe. Optional owner alerts use Resend and the support email in shop settings. Verify both delivery paths with a test order; setting environment variables alone does not prove delivery.
+
+## 5. Orders and inventory
+
+Customers can check out as guests. The cart stores only product IDs and quantities in an HttpOnly, SameSite=Lax cookie (Secure in production). The server reloads prices and stock before creating checkout; browser-supplied amounts are never trusted.
+
+A live checkout reserves inventory atomically before its payment URL reaches the buyer. Concurrent reservations cannot oversell the same units. Checkout Sessions expire after roughly 30–40 minutes; a verified expiration releases reserved inventory. An open cart alone does not reserve stock. Repeated checkout clicks reuse the order for that unchanged cart.
+
+Returning from checkout preserves access to the units reserved for that cart. Editing the cart first expires its unpaid Stripe Session and verifies the result before releasing inventory. If payment completed at the same time, the edit is stopped so a paid order cannot be treated as abandoned.
+
+Payment webhooks verify the Stripe signature and retrieve current payment state. Inventory is deducted once after a matching paid total is confirmed. A success-page visit cannot mark an order paid. Stripe retries failed webhook deliveries; **Orders → Sync payments** also checks up to ten pending orders or missing owner alerts per click. If webhook delivery is broken, unpaid reservations can remain held until synchronization confirms their expiration. Monitor delivery before opening the store.
+
+Test orders are labeled **Test · do not ship** and do not reserve or deduct live inventory. Database transaction tests exercise live reservation behavior on temporary fixtures without charging anyone.
+
+Paid orders show purchased item snapshots, the shipping address, and totals in the owner dashboard. Record a carrier and optional tracking number when marking an order shipped (stamped sticker mail may have no tracking). Refunds are initiated in Stripe and synchronized to the order after verified refund events. Refunds do not automatically restock physical goods; adjust stock after deciding whether a returned item is sellable. This version does not purchase postage or send tracking emails.
+
+## 6. Validation and launch
+
+Automated checks:
+
+```bash
+node --test tests/shop-*.test.mjs
+npx tsc --noEmit
+npm run build
+```
+
+Run `supabase/tests/shop.sql` against the migrated project to exercise database permissions and stock/payment transitions. It rolls back its fixture rows and setting changes. Identity sequences can advance during rolled-back tests, so order numbers need not be consecutive.
+
+Before live launch, verify with Stripe test credentials:
+
+1. Edit/publish a product and confirm photos, specs, price, and stock update without a deployment.
+2. On desktop and a phone, check navigation, the image gallery, cart quantity changes, removal, refresh persistence, and the owner forms.
+3. Complete and cancel test checkouts. Verify configured shipping, taxes, webhook delivery, owner order details, customer receipt, and owner alert.
+4. Verify wallets on eligible real devices using Stripe's supported test procedure.
+5. Test an expired checkout, duplicate webhook delivery, and a Stripe test refund. Confirm synchronization is safe to repeat.
+6. Confirm actual sticker price, stock, shipping costs, policies, and business settings. Switch to live credentials and a matching live webhook only when ready, then approve the production merge/deployment.
+
+Automated checks do not replace browser/device, merchant-account, wallet, notification, or end-to-end payment testing. Those require the owner's account setup. No live charge is needed for the code checks.
 
 ## References
 
-- [Shopify with an existing stack](https://shopify.dev/docs/storefronts/headless)
-- [Headless / Storefront API setup](https://shopify.dev/docs/storefronts/headless/building-with-the-storefront-api/getting-started)
-- [Creating and updating carts](https://shopify.dev/docs/storefronts/headless/building-with-the-storefront-api/cart/manage)
-- [Product management](https://help.shopify.com/en/manual/products/add-update-products)
-- [Apple Pay setup and limitations](https://help.shopify.com/en/manual/payments/accelerated-checkouts/apple-pay)
-- [Google Pay setup](https://help.shopify.com/en/manual/payments/accelerated-checkouts/google-pay)
+- [Stripe Checkout](https://docs.stripe.com/payments/checkout)
+- [Stripe webhook signatures and delivery](https://docs.stripe.com/webhooks)
+- [Stripe payment pricing](https://stripe.com/pricing)
+- [Supabase row-level security](https://supabase.com/docs/guides/database/postgres/row-level-security)
+- [Vercel Hobby plan and commercial use](https://vercel.com/docs/plans/hobby)

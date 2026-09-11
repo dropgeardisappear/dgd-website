@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
 import { assertSameOrigin, readShopBody, ShopInputError, validateLineId, validateQuantity, validateVariantId } from "@/lib/shop/validation";
-import { buyerIP, CartUpdateError, forgetCart, getCart, mutateCart, publicCart, shopIsConfigured } from "@/lib/shop/shopify";
+import { readCart, mutateCart, publicCart } from "@/lib/shop/cart";
+import { CartUpdateError, shopIsConfigured } from "@/lib/shop/supabase-server";
+import { getShopSettings } from "@/lib/shop/catalog";
+import { paymentSetup, releaseCheckoutForCartEdit } from "@/lib/shop/payments";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 const headers = { "Cache-Control": "private, no-store" };
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     if (!shopIsConfigured()) return NextResponse.json({ cart: null, enabled: false }, { headers });
-    const cart = await getCart(buyerIP(request));
-    if (!cart) await forgetCart();
-    return NextResponse.json({ cart: publicCart(cart), enabled: true }, { headers });
+    const settings = await getShopSettings();
+    return NextResponse.json({ cart: await publicCart(await readCart()), enabled: settings.store_open && paymentSetup().ready }, { headers });
   } catch {
     return NextResponse.json({ error: "Your cart could not be loaded. Please try again." }, { status: 503, headers });
   }
@@ -24,7 +27,11 @@ async function change(request: Request, action: "add" | "update" | "remove") {
       ? { merchandiseId: validateVariantId(body.merchandiseId), quantity: validateQuantity(body.quantity) }
       : { lineId: validateLineId(body.lineId), ...(action === "update" ? { quantity: validateQuantity(body.quantity) } : {}) };
     if (!shopIsConfigured()) return NextResponse.json({ error: "The shop is not open yet." }, { status: 503, headers });
-    return NextResponse.json(await mutateCart(action, input, buyerIP(request)), { headers });
+    const settings = await getShopSettings();
+    const enabled = settings.store_open && paymentSetup().ready;
+    if (action === "add" && !enabled) return NextResponse.json({ error: "The shop is not open yet." }, { status: 503, headers });
+    await releaseCheckoutForCartEdit();
+    return NextResponse.json({ cart: await mutateCart(action, input), enabled }, { headers });
   } catch (error) {
     if (error instanceof ShopInputError || error instanceof CartUpdateError) {
       return NextResponse.json({ error: error.message }, { status: 400, headers });

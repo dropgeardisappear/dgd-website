@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProduct, shopIsConfigured } from "@/lib/shop/shopify";
+import { getProduct, shopIsConfigured } from "@/lib/shop/catalog";
 import ProductDetail from "@/components/shop/ProductDetail";
 import styles from "@/components/shop/shop.module.css";
 

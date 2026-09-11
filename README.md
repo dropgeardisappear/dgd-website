@@ -2,7 +2,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## DGD shop
 
-The shop lives at `/shop` and uses Shopify for product management and checkout. See [the setup guide](docs/shop-setup.md) for the one-time connection, adding products and specs, and the pre-launch checks. Until Shopify is configured, the sticker is displayed as coming soon and purchases are disabled.
+The shop lives at `/shop`, with a protected product and order dashboard at `/admin/shop`. Supabase stores the catalog and orders; Stripe hosts checkout. See [the setup guide](docs/shop-setup.md) for the one-time setup and adding products without code changes. Checkout stays closed until payment credentials and store settings are configured. The supplied sticker starts as a private draft with its real price, specs, and inventory left for the owner to enter.
 
 ## Getting Started
 

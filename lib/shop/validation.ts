@@ -1,13 +1,5 @@
 export class ShopInputError extends Error {}
 
-export function validateStoreDomain(value: string) {
-  const domain = value.trim().toLowerCase();
-  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(domain)) {
-    throw new ShopInputError("Use your store's myshopify.com domain, without https:// or a path.");
-  }
-  return domain;
-}
-
 export function assertSameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   if (!origin || origin !== new URL(request.url).origin || request.headers.get("sec-fetch-site") === "cross-site") {
@@ -23,27 +15,43 @@ export function validateQuantity(value: unknown) {
 }
 
 export function validateVariantId(value: unknown) {
-  if (typeof value !== "string" || !/^gid:\/\/shopify\/ProductVariant\/\d+$/.test(value)) {
+  if (typeof value !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
     throw new ShopInputError("Choose a valid product option.");
   }
-  return value;
+  return value.toLowerCase();
 }
 
 export function validateLineId(value: unknown) {
-  if (typeof value !== "string" || !value.startsWith("gid://shopify/CartLine/") || value.length > 512 || /[\s\x00-\x1f]/.test(value)) {
-    throw new ShopInputError("That cart item could not be updated. Refresh your cart.");
-  }
-  return value;
+  return validateVariantId(value);
 }
 
-export function validateCheckoutUrl(value: string, storeDomain: string, customDomain?: string) {
+export function validateCheckoutUrl(value: string) {
   const url = new URL(value);
-  const hosts = new Set([storeDomain, "checkout.shopify.com", "shopify.com"]);
-  if (customDomain) hosts.add(customDomain.trim().toLowerCase());
-  if (url.protocol !== "https:" || url.username || url.password || url.port || !hosts.has(url.hostname)) {
+  if (url.protocol !== "https:" || url.username || url.password || url.port || url.hostname !== "checkout.stripe.com") {
     throw new Error("Unexpected checkout destination.");
   }
   return url.toString();
+}
+
+export type CartData = { key: string; lines: { productId: string; quantity: number }[] };
+
+export function parseCart(value: unknown): CartData | null {
+  try {
+    if (!value || typeof value !== "object") return null;
+    const cart = value as CartData;
+    const key = validateVariantId(cart.key);
+    if (!Array.isArray(cart.lines) || cart.lines.length > 30) return null;
+    const lines = cart.lines.map(line => ({ productId: validateVariantId(line.productId), quantity: validateQuantity(line.quantity) }));
+    if (new Set(lines.map(line => line.productId)).size !== lines.length) return null;
+    return { key, lines };
+  } catch { return null; }
+}
+
+export function priceInCents(value: string): number | null {
+  if (!value.trim()) return null;
+  if (!/^\d{1,6}(\.\d{1,2})?$/.test(value.trim())) throw new ShopInputError("Enter a price with up to two decimal places.");
+  const [whole, fraction = ""] = value.trim().split(".");
+  return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
 }
 
 export async function readShopBody(request: Request): Promise<Record<string, unknown>> {

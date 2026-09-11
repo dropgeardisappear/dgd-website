@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import ProductDetail from "@/components/shop/ProductDetail";
 import StickerPreview from "@/components/shop/StickerPreview";
-import { getProduct, getProducts, shopIsConfigured } from "@/lib/shop/shopify";
+import { getProduct, getProducts, shopIsConfigured } from "@/lib/shop/catalog";
 import { formatMoney } from "@/lib/shop/format";
 import styles from "@/components/shop/shop.module.css";
 
@@ -19,7 +19,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
       <div><p className={styles.eyebrow}>DROP GEAR DISAPPEAR</p><h1 className={styles.pageTitle}>The shop.</h1></div>
       <span className={styles.pageCount}>{!configured ? "First release · Stickers" : "DGD goods"}</span>
     </div>
-    {!configured ? <StickerPreview /> : singleProduct ? <ProductDetail product={singleProduct} featured /> : products?.nodes.length ? <>
+    {!configured || (!products?.nodes.length && !cursor) ? <StickerPreview /> : singleProduct ? <ProductDetail product={singleProduct} featured /> : products?.nodes.length ? <>
       <div className={styles.grid}>
         {products.nodes.map((product) => <article key={product.id} className={styles.card}>
           <Link href={`/shop/${product.handle}`}>
