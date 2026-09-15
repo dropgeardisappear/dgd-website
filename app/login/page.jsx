@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { shopFinderReturnPath } from "@/lib/shop-finder/login-return";
 
 export default function LoginPage() {
   const [mode, setMode] = useState("login");
@@ -52,7 +53,7 @@ export default function LoginPage() {
         return;
       }
 
-      window.location.href = "/account";
+      window.location.href = shopFinderReturnPath(window.location.search);
     }
   }
 
@@ -60,7 +61,7 @@ export default function LoginPage() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-       redirectTo: `${window.location.origin}/account`,
+       redirectTo: `${window.location.origin}${shopFinderReturnPath(window.location.search)}`,
       },
     });
   }

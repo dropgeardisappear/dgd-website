@@ -40,7 +40,7 @@ const initial = {
 };
 export default function ShopForm() {
   const [signedIn, SI] = useState(false);
-  const signInHref = "/login";
+  const signInHref = "/login?next=%2Fshop-finder%2Flist-your-shop";
   useEffect(() => {
     supabase.auth.getUser().then(({ data }: any) => SI(!!data.user));
     const {
