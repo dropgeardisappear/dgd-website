@@ -58,6 +58,10 @@ export function validateShop(d: any) {
     data[k] = String(d[k] || "")
       .trim()
       .slice(0, 1200);
+  const zones=["America/New_York","America/Chicago","America/Denver","America/Phoenix","America/Los_Angeles","America/Anchorage","Pacific/Honolulu"];
+  data.timezone=zones.includes(d.timezone)?d.timezone:"America/New_York";
+  data.availability=["Accepting inquiries","Booking ahead","Temporarily unavailable"].includes(d.availability)?d.availability:"Accepting inquiries";
+  data.schedule=Array.from({length:7},(_,i)=>{const v=d.schedule?.[i]||{}; if(!v.open&&!v.close)return {open:"",close:""}; if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(v.open)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(v.close)||v.open===v.close)throw Error("Choose valid opening and closing times."); return {open:v.open,close:v.close};});
   data.address = d.mobile
     ? ""
     : String(d.address || "")

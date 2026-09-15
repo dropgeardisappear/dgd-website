@@ -31,11 +31,12 @@ export async function GET(req: Request) {
 }
 export async function POST(req: Request) {
   let uploaded = "";
+  const photoPaths:string[]=[];
   let auth: Awaited<ReturnType<typeof userDatabase>> = null;
   try {
     auth = await userDatabase(req);
     if (!auth) return failure("Sign in to DGD to submit your shop.", 401);
-    if (Number(req.headers.get("content-length")) > 3500000)
+    if (Number(req.headers.get("content-length")) > 5500000)
       return failure("Use a logo under 3 MB.", 413);
     const f = await req.formData();
     const input = JSON.parse(String(f.get("data") || "{}"));
@@ -82,6 +83,16 @@ export async function POST(req: Request) {
       data.logo = old.data?.data?.logo;
       if (!data.logo) return failure("Upload your shop logo.");
     }
+    const photos=f.getAll("photos").filter((x):x is File=>x instanceof File&&x.size>0);
+    if(photos.length>4) throw Error("Choose up to 4 photos.");
+    data.photos=old.data?.data?.photos||[];
+    if(photos.length){data.photos=[];for(const photo of photos){
+      if(photo.size>500000||!["image/png","image/jpeg","image/webp"].includes(photo.type))throw Error("Use JPG, PNG, or WebP photos under 500 KB.");
+      const b=new Uint8Array(await photo.arrayBuffer());
+      if(!(photo.type==='image/png'?b[0]===137&&b[1]===80&&b[2]===78&&b[3]===71:photo.type==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:b[0]===82&&b[1]===73&&b[2]===70&&b[3]===70&&b[8]===87&&b[9]===69&&b[10]===66&&b[11]===80))throw Error("Invalid photo format.");
+      const path=`${auth.user.id}/${id}/${crypto.randomUUID()}`;
+      const result=await auth.db.storage.from("directory-logos").upload(path,b,{contentType:photo.type});if(result.error)throw result.error;photoPaths.push(path);data.photos.push(auth.db.storage.from("directory-logos").getPublicUrl(path).data.publicUrl);
+    }}
     const coords = await geocode(
       `${data.address} ${data.city} ${data.state} ${data.zip}`,
     );
@@ -100,6 +111,7 @@ export async function POST(req: Request) {
         "Your shop is saved and awaiting DGD review. It will appear in search once approved.",
     });
   } catch (e) {
+    if(photoPaths.length&&auth) await auth.db.storage.from("directory-logos").remove(photoPaths);
     if (uploaded && auth)
       await auth.db.storage.from("directory-logos").remove([uploaded]);
     return failure(

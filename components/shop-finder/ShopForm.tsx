@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
+import { weekdays } from "@/lib/shop-finder/hours";
+import { Inbox } from "./Messages";
 import { Header } from "./Finder";
 import { supabase } from "@/lib/supabase";
 function Checkbox({
@@ -34,11 +36,14 @@ const initial = {
   state: "",
   zip: "",
   hours: "",
+  availability: "Accepting inquiries",
+  timezone: "America/New_York",
+  schedule: Array.from({length:7},()=>({open:"",close:""})),
   mobile: false,
   vehicles: [] as string[],
   tags: [] as string[],
 };
-export default function ShopForm() {
+export default function ShopForm({ dashboard = false }: { dashboard?: boolean }) {
   const [signedIn, SI] = useState(false);
   const signInHref = "/login?next=%2Fshop-finder%2Flist-your-shop";
   useEffect(() => {
@@ -56,6 +61,7 @@ export default function ShopForm() {
     } = await supabase.auth.getSession();
     return { Authorization: `Bearer ${session?.access_token || ""}` };
   }
+  const [photos, PH] = useState<File[]>([]);
   const [d, D] = useState<any>(initial),
     [step, S] = useState(0),
     [logo, L] = useState<File | null>(null),
@@ -142,6 +148,7 @@ export default function ShopForm() {
       const f = new FormData();
       f.append("data", JSON.stringify(d));
       if (logo) f.append("logo", logo);
+      photos.forEach(file=>f.append("photos",file));
       const r = await fetch("/api/shop-finder/shops", {
         method: "POST",
         headers: await authHeaders(),
@@ -160,8 +167,9 @@ export default function ShopForm() {
     <>
       <Header />
       <main className="form-shell">
+        {dashboard && signedIn && <Inbox/>}
         <span className="eyebrow">JOIN THE DGD SHOP DIRECTORY</span>
-        <h1>Put your shop on the map.</h1>
+        <h1>{dashboard ? "Your shop dashboard." : "Put your shop on the map."}</h1>
         <p>
           Connect with people who need your skills. Founding listings are
           free—no card required.
@@ -222,6 +230,7 @@ export default function ShopForm() {
                       />
                     </span>
                   </label>
+                  <label className="field">Photos of your work (up to 4, each under 500 KB)<input type="file" multiple accept="image/png,image/jpeg,image/webp" onChange={e=>{const files=Array.from(e.target.files||[]);if(files.length>4||files.some(f=>f.size>500000)){E("Choose up to 4 photos under 500 KB each.");PH([]);}else{PH(files);E("");}}}/></label><p className="small">New photos replace the existing gallery when saved.</p>
                   {field(
                     "email",
                     "Private contact email",
@@ -291,6 +300,7 @@ export default function ShopForm() {
                     {field("zip", "ZIP code", "ZIP code")}
                   </div>
                   {field("county", "County", "e.g. Orange")}
+                  <label className="field">Availability<select value={d.availability||"Accepting inquiries"} onChange={e=>set("availability",e.target.value)}>{["Accepting inquiries","Booking ahead","Temporarily unavailable"].map(v=><option key={v}>{v}</option>)}</select></label><label className="field">Time zone<select value={d.timezone||"America/New_York"} onChange={e=>set("timezone",e.target.value)}>{["America/New_York","America/Chicago","America/Denver","America/Phoenix","America/Los_Angeles","America/Anchorage","Pacific/Honolulu"].map(v=><option key={v}>{v}</option>)}</select></label><h3>Weekly hours</h3><p className="small">Leave both times blank for closed days. These hours power the “Open now” filter.</p>{weekdays.map((day,i)=><div className="grid3" key={day}><span>{day}</span>{["open","close"].map(k=><label className="field" key={k}>{k}<input type="time" value={d.schedule?.[i]?.[k]||""} onChange={e=>{const a=Array.from({length:7},(_,j)=>({...d.schedule?.[j]}));a[i][k]=e.target.value;set("schedule",a);}}/></label>)}</div>)}
                   {field(
                     "hours",
                     "Business hours (optional)",

@@ -1,4 +1,6 @@
 export const categories: Record<string, string[]> = {
+  "Roadside & Mobile": ["Mobile mechanic", "Towing", "Roadside assistance"],
+  "Diesel Specialists": ["Diesel repair", "Diesel tuning"],
   "Mechanic & Repair": [
     "Diagnostics",
     "Engine repair",

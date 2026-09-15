@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import {Inbox} from "@/components/shop-finder/Messages";
 import { Header } from "@/components/shop-finder/Finder";
 export default function Review() {
   const [shops, S] = useState<any[]>([]),
@@ -30,11 +31,11 @@ export default function Review() {
   useEffect(() => {
     void load();
   }, []);
-  async function review(id: string, status: string) {
+  async function review(id: string, status: string, verified = false) {
     const r = await fetch("/api/shop-finder/review", {
       method: "POST",
       headers: await headers(),
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status, verified }),
     });
     if (!r.ok) {
       M((await r.json()).error);
@@ -48,7 +49,7 @@ export default function Review() {
       <main className="form-shell">
         <h1>Shop review</h1>
         <p>Check the business links and services before approving a listing.</p>
-        <p role="status">{message}</p>
+        <p role="status">{message}</p><Inbox/>
         {shops.map((s) => (
           <article className="shop-card" key={s.id}>
             <div>
@@ -79,9 +80,9 @@ export default function Review() {
                   className="primary"
                   onClick={() => review(s.id, "approved")}
                 >
-                  Approve
+                  Approve listing
                 </button>
-              </div>
+              <button className="secondary" onClick={()=>review(s.id,"approved",true)}>Approve & verify business details</button></div>
             </div>
           </article>
         ))}

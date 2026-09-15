@@ -1,3 +1,5 @@
+import {reserveAI} from "@/lib/shop-finder/limits";
+import { openNow } from "@/lib/shop-finder/hours";
 import { interpretRequest } from "@/lib/shop-finder/matching";
 import { shopDatabase } from "@/lib/shop/supabase-server";
 import { geocode } from "@/lib/shop-finder/geocode";
@@ -71,8 +73,8 @@ export async function POST(req: Request) {
         { error: "Enter your city or ZIP code." },
         { status: 400 },
       );
-    const interpretation = d.need.trim()
-      ? await interpretRequest(d)
+    const interpretation = d.need.trim() && await reserveAI(req)
+      ? await interpretRequest({need:d.need,vehicle:d.vehicle,year:d.year,make:d.make,model:d.model})
       : { tags: [], question: "", mode: "tags" };
     const tags = new Set<string>(d.tag ? [d.tag] : interpretation.tags);
     const words = d.need.toLowerCase();
@@ -85,13 +87,15 @@ export async function POST(req: Request) {
     if (!coords) coords = await geocode(`${d.location} ${d.state || ""}`);
     const { data: rows, error } = await shopDatabase()
       .from("directory_shops")
-      .select("id,name,data")
+      .select("id,name,data,verified")
       .eq("status", "approved")
       .limit(500);
     if (error) throw error;
     let shops = (rows || [])
-      .map((row: any) => ({ id: row.id, name: row.name, ...row.data }))
+      .map((row: any) => ({ id: row.id, name: row.name, ...row.data, verified: row.verified }))
       .filter((s: any) => s.vehicles.includes(d.vehicle));
+    if(d.mobileOnly===true)shops=shops.filter((s:any)=>s.mobile);
+    if(d.openOnly===true)shops=shops.filter((s:any)=>s.availability!=="Temporarily unavailable"&&openNow(s.schedule,s.timezone));
     const wanted = [...tags];
     if (wanted.length)
       shops = shops.filter((s: any) =>

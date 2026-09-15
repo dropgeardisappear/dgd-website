@@ -34,12 +34,12 @@ export async function POST(req: Request) {
   try {
     const a = await admin(req);
     if (!a) return failure("DGD administrator access required.", 403);
-    const { id, status } = await req.json();
+    const { id, status, verified } = await req.json();
     if (!["approved", "rejected"].includes(status))
       return failure("Choose approve or reject.");
     const r = await a.db
       .from("directory_shops")
-      .update({ status })
+      .update({ status, verified: status==="approved" && verified===true })
       .eq("id", id)
       .eq("status", "pending")
       .select("id")

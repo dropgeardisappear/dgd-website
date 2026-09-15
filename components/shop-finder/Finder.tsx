@@ -60,6 +60,7 @@ export function Header() {
       </a>
       <nav>
         <a href="/shop-finder">Find a Shop</a>
+        <a href="/shop-finder/dashboard">My Shops</a>
         <a className="nav-cta" href="/shop-finder/list-your-shop">
           List Your Shop <ArrowUpRight size={17} />
         </a>
@@ -82,6 +83,7 @@ export default function Home() {
     [county, CO] = useState(""),
     [state, ST] = useState(""),
     [radius, RA] = useState("25");
+  const [mobileOnly,SM]=useState(false),[openOnly,SO]=useState(false);
   async function search(e: any) {
     e.preventDefault();
     B(true);
@@ -91,6 +93,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          mobileOnly, openOnly,
           vehicle,
           year,
           make,
@@ -261,6 +264,7 @@ export default function Home() {
                 type="button"
                 className="chip"
                 onClick={() => {
+                  SM(false);SO(false);
                   T("");
                   CO("");
                   ST("");
@@ -269,6 +273,7 @@ export default function Home() {
               >
                 Clear filters
               </button>
+              <label><input type="checkbox" checked={mobileOnly} onChange={e=>SM(e.target.checked)}/> Mobile service only</label><label><input type="checkbox" checked={openOnly} onChange={e=>SO(e.target.checked)}/> Open now (listed hours)</label>
               <div className="grid3">
                 <label className="field">
                   County
@@ -360,12 +365,12 @@ export default function Home() {
             <article className="shop-card" key={s.id}>
               <img src={s.logo} alt="" />
               <div>
-                <h2>{s.name}</h2>
+                <h2><a href={`/shop-finder/shops/${s.id}`}>{s.name}</a></h2>
                 <p>
                   {s.city}, {s.state}{" "}
                   {s.distance != null && `· ${s.distance} miles away`}
                 </p>
-                <p>{s.description}</p>
+                {s.verified && <span className="chip">✓ DGD verified business details</span>}<p>{s.description}</p>
                 <div className="chips">
                   {s.tags.slice(0, 5).map((t: string) => (
                     <span className="chip" key={t}>
@@ -374,6 +379,7 @@ export default function Home() {
                   ))}
                 </div>
                 <div className="links">
+                  <a href={`/shop-finder/shops/${s.id}`}>View shop →</a>
                   {["website", "instagram", "facebook"].map(
                     (k) =>
                       /^https?:\/\//i.test(s[k] || "") && (
