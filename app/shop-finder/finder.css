@@ -912,3 +912,8 @@
   .finder-surface .dashboard-actions { flex-wrap:wrap; gap:12px; }
   .finder-surface .dashboard-actions a { min-height:44px; display:inline-flex; align-items:center; }
 }
+
+.finder-surface .empty-results { padding:24px; }
+.finder-surface .empty-results p { margin:12px 0; line-height:1.6; }
+.finder-surface .empty-results .links { display:flex; flex-wrap:wrap; gap:12px; margin:18px 0; }
+.finder-surface .empty-results button { min-height:44px; }

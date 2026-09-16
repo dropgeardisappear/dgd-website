@@ -85,6 +85,7 @@ export default function Home() {
     [state, ST] = useState(""),
     [radius, RA] = useState("25");
   const [mobileOnly,SM]=useState(false),[openOnly,SO]=useState(false);
+  const [searched, setSearched] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [history, setHistory] = useState<{question:string;answer:string}[]>([]);
@@ -119,6 +120,7 @@ export default function Home() {
       const d: any = await r.json();
       if (!r.ok) throw Error(d.error);
       R(d.shops);
+      setSearched(true);
       requestAnimationFrame(() => document.getElementById("shop-results")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }));
       setSearchedContext(context);
       setHistory(nextHistory); setAnswer(""); setQuestion(d.question || "");
@@ -351,6 +353,17 @@ export default function Home() {
         </div>
         <section id="shop-results" className="results" aria-live="polite" aria-label="Shop search results">
           {message && <div className="notice">{message}</div>}
+          {searched && !busy && results.length === 0 && context === searchedContext && <div className="notice empty-results">
+            <h2>No shops match this search yet</h2>
+            <p>Our directory is growing. Try one of these options to find more shops.</p>
+            <div className="links">
+              {Number(radius) < 250 && <button type="button" className="secondary" onClick={() => { RA(String(([10, 25, 50, 100, 250].find(value => value > Number(radius)) || 250))); document.querySelector<HTMLButtonElement>(".search-button")?.focus(); }}>Widen distance to {([10, 25, 50, 100, 250].find(value => value > Number(radius)) || 250)} miles</button>}
+              <button type="button" className="secondary" onClick={() => { T(""); CO(""); ST(""); SM(false); SO(false); document.querySelector<HTMLTextAreaElement>("textarea")?.focus(); }}>Adjust services and filters</button>
+              <button type="button" className="secondary" onClick={() => document.querySelector<HTMLInputElement>('input[aria-label="City or ZIP code"]')?.focus()}>Change city or ZIP</button>
+            </div>
+            <p className="small">After changing your search, tap Find My Shop again. Your vehicle and work description will stay filled in.</p>
+            <a className="text-link" href="/shop-finder/list-your-shop">Own a shop? Join the free directory →</a>
+          </div>}
           {context === searchedContext && history.length > 0 && <details className="notice"><summary>Your search details</summary>{history.map((turn, i) => <div key={i}><p><b>DGD:</b> {turn.question}</p><p><b>You:</b> {turn.answer}</p></div>)}</details>}
           {context === searchedContext && question && history.length < 3 && <form className="notice followup-form" onSubmit={e => search(e, true)}>
             <label className="field" htmlFor="search-answer"><b>Let’s narrow it down</b><span>{question}</span></label>
