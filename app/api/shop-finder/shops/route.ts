@@ -85,8 +85,12 @@ export async function POST(req: Request) {
     }
     const photos=f.getAll("photos").filter((x):x is File=>x instanceof File&&x.size>0);
     if(photos.length>4) throw Error("Choose up to 4 photos.");
-    data.photos=old.data?.data?.photos||[];
-    if(photos.length){data.photos=[];for(const photo of photos){
+    const oldPhotos:string[]=old.data?.data?.photos||[];
+    const keep=input.photos===undefined?oldPhotos:input.photos;
+    if(!Array.isArray(keep)||keep.some((url:unknown)=>typeof url!=="string"||!oldPhotos.includes(url)))throw Error("Choose photos from your existing gallery.");
+    data.photos=[...new Set(keep)];
+    if(data.photos.length+photos.length>4)throw Error("Your gallery can contain up to 4 photos.");
+    if(photos.length){for(const photo of photos){
       if(photo.size>500000||!["image/png","image/jpeg","image/webp"].includes(photo.type))throw Error("Use JPG, PNG, or WebP photos under 500 KB.");
       const b=new Uint8Array(await photo.arrayBuffer());
       if(!(photo.type==='image/png'?b[0]===137&&b[1]===80&&b[2]===78&&b[3]===71:photo.type==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:b[0]===82&&b[1]===73&&b[2]===70&&b[3]===70&&b[8]===87&&b[9]===69&&b[10]===66&&b[11]===80))throw Error("Invalid photo format.");

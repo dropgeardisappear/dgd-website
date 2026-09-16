@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { weekdays } from "@/lib/shop-finder/hours";
 import { Inbox } from "./Messages";
+import PhotoPicker from "./PhotoPicker";
 import { Header } from "./Finder";
 import { supabase } from "@/lib/supabase";
 function Checkbox({
@@ -234,7 +235,7 @@ export default function ShopForm({ dashboard = false }: { dashboard?: boolean })
                       />
                     </span>
                   </label>
-                  <label className="field">Photos of your work (up to 4, each under 500 KB)<input type="file" multiple accept="image/png,image/jpeg,image/webp" onChange={e=>{const files=Array.from(e.target.files||[]);if(files.length>4||files.some(f=>f.size>500000)){E("Choose up to 4 photos under 500 KB each.");PH([]);}else{PH(files);E("");}}}/></label><p className="small">New photos replace the existing gallery when saved.</p>
+                  <PhotoPicker files={photos} onChange={PH} existing={d.photos||[]} onRemoveExisting={url=>set("photos",(d.photos||[]).filter((p:string)=>p!==url))} maximum={4} label="Photos of your work" onError={E}/><p className="small">Photo changes take effect when you save your listing.</p>
                   {field(
                     "email",
                     "Private contact email",
@@ -420,6 +421,7 @@ export default function ShopForm({ dashboard = false }: { dashboard?: boolean })
                       SA("");
                       S(0);
                       L(null);
+                      PH([]);
                       LU("");
                       window.scrollTo({ top: 0, behavior: "smooth" });
                     }}
