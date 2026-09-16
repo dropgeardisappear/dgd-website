@@ -119,6 +119,7 @@ export default function Home() {
       const d: any = await r.json();
       if (!r.ok) throw Error(d.error);
       R(d.shops);
+      requestAnimationFrame(() => document.getElementById("shop-results")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }));
       setSearchedContext(context);
       setHistory(nextHistory); setAnswer(""); setQuestion(d.question || "");
       S(
@@ -348,7 +349,7 @@ export default function Home() {
             </a>
           </aside>
         </div>
-        <section className="results" aria-live="polite">
+        <section id="shop-results" className="results" aria-live="polite" aria-label="Shop search results">
           {message && <div className="notice">{message}</div>}
           {context === searchedContext && history.length > 0 && <details className="notice"><summary>Your search details</summary>{history.map((turn, i) => <div key={i}><p><b>DGD:</b> {turn.question}</p><p><b>You:</b> {turn.answer}</p></div>)}</details>}
           {context === searchedContext && question && history.length < 3 && <form className="notice followup-form" onSubmit={e => search(e, true)}>

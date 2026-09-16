@@ -882,3 +882,33 @@
 .match-reasons h3 { margin:0 0 8px; font-size:14px; color:#fff; }
 .match-reasons ul { margin:0; padding-left:18px; display:grid; gap:6px; color:#e5e5e5; font-size:14px; }
 .match-reasons p { margin:12px 0 0; color:#aaa; font-size:12px; line-height:1.5; }
+
+/* Phone layouts: readable fields, comfortable touch targets, and wrapping content. */
+.finder-surface .results { scroll-margin-top:24px; }
+.finder-surface .shop-card > div,
+.finder-surface .dashboard-shop > div { min-width:0; overflow-wrap:anywhere; }
+@media (max-width:600px) {
+  .finder-surface .header { padding:16px; gap:12px; }
+  .finder-surface .header nav { display:grid; grid-template-columns:1fr 1fr 1.35fr; gap:8px; font-size:11px; }
+  .finder-surface .header nav a { justify-content:center; text-align:center; padding:10px 4px; min-height:48px; }
+  .finder-surface .nav-cta { gap:4px; }
+  .finder-surface .nav-cta svg { flex-shrink:0; width:14px; }
+  .finder-surface .grid3 { grid-template-columns:1fr; gap:16px; }
+  .finder-surface .hours-row { grid-template-columns:1fr 1fr; gap:10px; padding:12px 0; border-bottom:1px solid #ffffff20; }
+  .finder-surface .hours-row > span { grid-column:1 / -1; font-weight:600; }
+  .finder-surface .vehicle-options { gap:8px; }
+  .finder-surface .vehicle { min-width:0; flex-direction:column; gap:8px; padding:12px 4px; font-size:12px; }
+  .finder-surface button.chip { min-height:44px; padding:10px 12px; }
+  .finder-surface summary { min-height:44px; padding:12px 0; }
+  .finder-surface .check-label { min-height:44px; padding-top:10px; padding-bottom:10px; align-items:center; }
+  .finder-surface .check-label input { flex-shrink:0; }
+  .finder-surface .links { display:flex; flex-wrap:wrap; gap:8px 16px; }
+  .finder-surface .links a { display:inline-flex; align-items:center; min-height:44px; }
+  .finder-surface .form-actions { gap:12px; flex-wrap:wrap; }
+  .finder-surface .form-actions button { min-height:48px; flex:1; }
+  .finder-surface .followup-form .primary { width:100%; justify-content:center; }
+  .finder-surface .dashboard-tabs { gap:16px; }
+  .finder-surface .dashboard-tabs button { text-align:left; font-size:14px; }
+  .finder-surface .dashboard-actions { flex-wrap:wrap; gap:12px; }
+  .finder-surface .dashboard-actions a { min-height:44px; display:inline-flex; align-items:center; }
+}
