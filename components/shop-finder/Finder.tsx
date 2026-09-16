@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import VehicleFields from "./VehicleFields";
 import { useState } from "react";
 import {
   Car,
@@ -84,8 +85,15 @@ export default function Home() {
     [state, ST] = useState(""),
     [radius, RA] = useState("25");
   const [mobileOnly,SM]=useState(false),[openOnly,SO]=useState(false);
-  async function search(e: any) {
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [history, setHistory] = useState<{question:string;answer:string}[]>([]);
+  const context = JSON.stringify({vehicle, year, make, model, need, location, tag, coords, county, state, radius, mobileOnly, openOnly});
+  const [searchedContext, setSearchedContext] = useState("");
+  async function search(e: any, followup = false) {
     e.preventDefault();
+    const nextHistory = followup ? [...history, {question, answer: answer.trim()}] : [];
+    if (followup && (!answer.trim() || nextHistory.length > 3 || context !== searchedContext)) return;
     B(true);
     S("");
     try {
@@ -99,6 +107,7 @@ export default function Home() {
           make,
           model,
           need,
+          conversation: nextHistory,
           location,
           tag,
           coords,
@@ -110,6 +119,8 @@ export default function Home() {
       const d: any = await r.json();
       if (!r.ok) throw Error(d.error);
       R(d.shops);
+      setSearchedContext(context);
+      setHistory(nextHistory); setAnswer(""); setQuestion(d.question || "");
       S(
         d.message +
           (d.matching === "ai"
@@ -155,7 +166,7 @@ export default function Home() {
           </p>
         </div>
         <div className="workspace">
-          <form className="search-panel" onSubmit={search}>
+          <form className="search-panel" onSubmit={e => search(e)}>
             <div className="section-title">
               <span className="step">01</span>
               <h2>What do you drive?</h2>
@@ -169,7 +180,7 @@ export default function Home() {
                     type="button"
                     aria-pressed={vehicle === v}
                     className={vehicle === v ? "vehicle active" : "vehicle"}
-                    onClick={() => V(v)}
+                    onClick={() => { V(v); M(""); MO(""); setQuestion(""); setHistory([]); }}
                   >
                     <Icon size={29} />
                     {v}
@@ -177,30 +188,7 @@ export default function Home() {
                 );
               })}
             </div>
-            <div className="grid3">
-              <Picker
-                label="Year"
-                value={year}
-                onChange={Y}
-                options={Array.from({ length: 77 }, (_, i) => String(2027 - i))}
-              />
-              <label className="field">
-                Make
-                <input
-                  placeholder="e.g. Ford"
-                  value={make}
-                  onChange={(e) => M(e.target.value)}
-                />
-              </label>
-              <label className="field">
-                Model
-                <input
-                  placeholder="e.g. F-150"
-                  value={model}
-                  onChange={(e) => MO(e.target.value)}
-                />
-              </label>
-            </div>
+            <VehicleFields vehicle={vehicle} year={year} make={make} model={model} onYear={Y} onMake={M} onModel={MO}/>
             <div className="section-title">
               <span className="step">02</span>
               <h2>What does your ride need?</h2>
@@ -209,7 +197,8 @@ export default function Home() {
               aria-label="Describe the work you need"
               placeholder="Tell us what you have in mind. For example, ‘I need a lift kit installed on my truck.’"
               value={need}
-              onChange={(e) => N(e.target.value)}
+              maxLength={3000}
+              onChange={(e) => { N(e.target.value); setQuestion(""); setHistory([]); }}
             />
             <div className="chips">
               {[
@@ -361,6 +350,12 @@ export default function Home() {
         </div>
         <section className="results" aria-live="polite">
           {message && <div className="notice">{message}</div>}
+          {context === searchedContext && history.length > 0 && <details className="notice"><summary>Your search details</summary>{history.map((turn, i) => <div key={i}><p><b>DGD:</b> {turn.question}</p><p><b>You:</b> {turn.answer}</p></div>)}</details>}
+          {context === searchedContext && question && history.length < 3 && <form className="notice followup-form" onSubmit={e => search(e, true)}>
+            <label className="field" htmlFor="search-answer"><b>Let’s narrow it down</b><span>{question}</span></label>
+            <textarea id="search-answer" value={answer} onChange={e => setAnswer(e.target.value)} maxLength={1000} required placeholder="Add a little more detail…"/>
+            <button className="primary" disabled={busy || !answer.trim()}>{busy ? "Updating matches…" : "Update my matches"}</button>
+          </form>}
           {results.map((s) => (
             <article className="shop-card" key={s.id}>
               <img src={s.logo} alt="" />

@@ -56,6 +56,11 @@ export async function POST(req: Request) {
         { error: "Keep location and vehicle details under 150 characters." },
         { status: 400 },
       );
+    const conversation = d.conversation ?? [];
+    if (!Array.isArray(conversation) || conversation.length > 3 || conversation.some((turn: any) =>
+      !turn || typeof turn.question !== "string" || turn.question.length > 500 ||
+      typeof turn.answer !== "string" || !turn.answer.trim() || turn.answer.length > 1000))
+      return Response.json({error: "Keep replies under 1,000 characters and start a new search after three replies."}, {status: 400});
     let coords = d.coords;
     if (
       coords &&
@@ -74,10 +79,10 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     const interpretation = d.need.trim() && await reserveAI(req)
-      ? await interpretRequest({need:d.need,vehicle:d.vehicle,year:d.year,make:d.make,model:d.model})
+      ? await interpretRequest({need:d.need,vehicle:d.vehicle,year:d.year,make:d.make,model:d.model,conversation})
       : { tags: [], question: "", mode: "tags" };
     const tags = new Set<string>(d.tag ? [d.tag] : interpretation.tags);
-    const words = d.need.toLowerCase();
+    const words = [d.need, ...conversation.map((turn: any) => turn.answer)].join(" ").toLowerCase();
     for (const [word, ts] of Object.entries(aliases)) {
       if (new RegExp(`\\b${word}\\w*\\b`).test(words))
         ts.forEach((t) => tags.add(t));
@@ -145,10 +150,10 @@ export async function POST(req: Request) {
     if (!coords)
       message +=
         " Distance lookup is unavailable; results match your city or ZIP code.";
-    if (interpretation.question)
-      message = interpretation.question + " " + message;
+
     return Response.json({
       shops: safe,
+      question: conversation.length < 3 ? interpretation.question.slice(0, 500) : "",
       message,
       tags: wanted,
       matching: interpretation.mode,
