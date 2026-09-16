@@ -7,3 +7,6 @@ test('rejects external and unapproved destinations',()=>{for(const next of ['htt
 test('keeps the existing account destination for ordinary login',()=>assert.equal(shopFinderReturnPath(''),'/account'));
 
 test("returns owners to the dashboard",()=>{assert.equal(shopFinderReturnPath("?next=%2Fshop-finder%2Fdashboard"),"/shop-finder/dashboard");});
+
+test('returns customers to exact shop profiles',()=>assert.equal(shopFinderReturnPath('?next=/shop-finder/shops/ded7777b-8089-4a24-a3fc-6f0d688a6e6b'),'/shop-finder/shops/ded7777b-8089-4a24-a3fc-6f0d688a6e6b'));
+test('rejects malformed shop return paths',()=>{for(const path of ['/shop-finder/shops/anything','/shop-finder/shops/../admin','/shop-finder/shops/ded7777b-8089-4a24-a3fc-6f0d688a6e6b?next=https://example.com']) assert.equal(shopFinderReturnPath('?next='+encodeURIComponent(path)),'/account');});

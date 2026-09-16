@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Header } from "./Finder";
+import { isShopProfilePath } from "@/lib/shop-finder/login-return";
 import { Inbox } from "./Messages";
 type Shop = {id:string;name:string;logo:string;city:string;state:string;status:string;availability?:string};
 export default function Dashboard() {
@@ -20,6 +21,16 @@ export default function Dashboard() {
         if(controller.signal.aborted)return;
         setSignedIn(!!session);setShops([]);
         if(!session)return;
+        try {
+          const saved = sessionStorage.getItem("dgd-shop-login-return");
+          sessionStorage.removeItem("dgd-shop-login-return");
+          const target = saved ? JSON.parse(saved) : null;
+          if(target && target.expires > Date.now() && isShopProfilePath(target.path)) {
+            window.location.replace(target.path);
+            return;
+          }
+        } catch { /* Normal dashboard access still works without session storage. */ }
+
         const r=await fetch("/api/shop-finder/shops",{signal:controller.signal,headers:{Authorization:`Bearer ${session.access_token}`}});
         const data=await r.json();if(!r.ok)throw Error(data.error||"Could not load your shops.");
         if(!controller.signal.aborted)setShops(data.shops);

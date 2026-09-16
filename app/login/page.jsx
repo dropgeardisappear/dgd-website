@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { shopFinderReturnPath } from "@/lib/shop-finder/login-return";
+import { isShopProfilePath, shopFinderReturnPath } from "@/lib/shop-finder/login-return";
 
 export default function LoginPage() {
   const [mode, setMode] = useState("login");
@@ -58,10 +58,22 @@ export default function LoginPage() {
   }
 
   async function loginWithGoogle() {
+    const destination = shopFinderReturnPath(window.location.search);
+    let callback = destination;
+    try {
+      sessionStorage.removeItem("dgd-shop-login-return");
+      if (isShopProfilePath(destination)) {
+        sessionStorage.setItem("dgd-shop-login-return", JSON.stringify({path:destination,expires:Date.now()+30*60*1000}));
+        callback = "/shop-finder/dashboard";
+      }
+    } catch {
+      alert("Allow browser session storage to return to this shop after Google sign-in.");
+      return;
+    }
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-       redirectTo: `${window.location.origin}${shopFinderReturnPath(window.location.search)}`,
+       redirectTo: `${window.location.origin}${callback}`,
       },
     });
   }
