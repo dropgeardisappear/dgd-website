@@ -877,3 +877,8 @@
 .followup-form { display:grid; gap:12px; }
 .followup-form textarea { width:100%; min-height:90px; }
 .followup-form .primary { justify-self:start; }
+
+.match-reasons { margin:16px 0; padding:16px; border-left:3px solid #ff6900; background:#171717; border-radius:0 8px 8px 0; }
+.match-reasons h3 { margin:0 0 8px; font-size:14px; color:#fff; }
+.match-reasons ul { margin:0; padding-left:18px; display:grid; gap:6px; color:#e5e5e5; font-size:14px; }
+.match-reasons p { margin:12px 0 0; color:#aaa; font-size:12px; line-height:1.5; }

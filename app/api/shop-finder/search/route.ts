@@ -1,3 +1,4 @@
+import { matchReasons } from "@/lib/shop-finder/match-reasons";
 import {reserveAI} from "@/lib/shop-finder/limits";
 import { openNow } from "@/lib/shop-finder/hours";
 import { interpretRequest } from "@/lib/shop-finder/matching";
@@ -139,6 +140,7 @@ export async function POST(req: Request) {
     const safe = shops.map(({ email, lat, lon, ...rest }: any) => ({
       ...rest,
       address: rest.mobile ? "" : rest.address,
+      matchReasons: matchReasons(rest, wanted, d.vehicle),
     }));
     let message = shops.length
       ? `${shops.length} ${shops.length === 1 ? "shop" : "shops"} found${wanted.length ? " for " + wanted.join(", ") : ""}. Confirm your exact vehicle and project with the shop.`

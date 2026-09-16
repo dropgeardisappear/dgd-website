@@ -373,6 +373,11 @@ export default function Home() {
                     </span>
                   ))}
                 </div>
+                {s.matchReasons?.length > 0 && <div className="match-reasons">
+                  <h3>Why this shop matches</h3>
+                  <ul>{s.matchReasons.map((reason: string) => <li key={reason}>{reason}</li>)}</ul>
+                  <p>Based on the shop’s listing. Confirm your exact year, make, model, and job with the shop.</p>
+                </div>}
                 <div className="links">
                   <a href={`/shop-finder/shops/${s.id}`}>View shop →</a>
                   {["website", "instagram", "facebook"].map(
