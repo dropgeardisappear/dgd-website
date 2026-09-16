@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  "https://gfufidjjiyroagmsreeg.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmdWZpZGpqaXlyb2FnbXNyZWVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MTE2MzQsImV4cCI6MjA5NDI4NzYzNH0.PlczG3eNWaajNqFykoeijDAB_k_kPxTk1gjxR7DGAOE"
-);
+import { supabase } from "@/lib/supabase";
 
 export default function AccountPage() {
   const [user, setUser] = useState(null);
@@ -43,23 +38,15 @@ export default function AccountPage() {
 
       if (data) {
         setProfile(data);
-        setUsername(data.username || "");
+        const emailName = session.user.email?.split("@")[0];
+        setUsername(data.username === session.user.email || data.username === emailName ? "" : data.username || "");
         setBio(data.bio || "");
         setInstagram(data.instagram || "");
         setTiktok(data.tiktok || "");
         setYoutube(data.youtube || "");
       } else {
-        const starterUsername = session.user.email.split("@")[0];
-
-        await supabase.from("profiles").insert([
-          {
-            id: session.user.id,
-            email: session.user.email,
-            username: starterUsername,
-          },
-        ]);
-
-        setUsername(starterUsername);
+        const chosen = session.user.user_metadata?.username || "";
+        setUsername(/^[a-z0-9_]{3,30}$/.test(chosen) ? chosen : "");
       }
     }
 
@@ -68,6 +55,11 @@ export default function AccountPage() {
 
   async function saveProfile(e) {
     e.preventDefault();
+    const cleanUsername = username.trim().toLowerCase().replace(/^@/, "");
+    if (!/^[a-z0-9_]{3,30}$/.test(cleanUsername) || cleanUsername === user.email?.split("@")[0].toLowerCase()) {
+      alert("Choose a username with 3–30 letters, numbers, or underscores. Do not use your email.");
+      return;
+    }
     setSaving(true);
 
     let avatarUrl = profile?.avatar_url || "";
@@ -114,13 +106,6 @@ export default function AccountPage() {
 
       bannerUrl = data.publicUrl;
     }
-
-  const cleanUsername = username
-  .replace("@", "")
-  .toLowerCase()
-  .replace(/\s+/g, "")
-  .replace(/[^a-z0-9_]/g, "")
-  .trim();
 
     const { error } = await supabase.from("profiles").upsert([
       {
@@ -213,7 +198,7 @@ export default function AccountPage() {
               </div>
 
               <a
-                href={`/garage/${username}`}
+                href={username ? `/garage/${username}` : "#username"}
                 className="mt-8 block text-center bg-orange-500 text-black py-4 rounded-2xl uppercase font-black hover:bg-white transition text-sm md:text-base"
               >
                 View My Garage
@@ -238,7 +223,7 @@ export default function AccountPage() {
               </h2>
 
               <p className="text-gray-400 text-sm md:text-base">
-                This profile powers your garage, comments, ratings, favorites, and socials.
+                Choose a public username for your garage and comments. Your email is for signing in, not your public name.
               </p>
             </div>
 
@@ -253,7 +238,12 @@ export default function AccountPage() {
             />
 
             <Input
-              placeholder="Username"
+              id="username"
+              aria-label="Public username"
+              required
+              minLength={3}
+              maxLength={30}
+              placeholder="Choose your public username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />

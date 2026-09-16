@@ -1,3 +1,4 @@
+import { userDatabase } from "@/lib/shop-finder/server";
 import { NextResponse } from "next/server";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import {
@@ -8,6 +9,7 @@ import {
 
 export async function POST(request) {
   try {
+    if (!await userDatabase(request)) return NextResponse.json({error:"Sign in to verify your phone."},{status:401});
     const body = await request.json();
     const rawPhone = String(body.phone || "").trim();
 

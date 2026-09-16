@@ -156,6 +156,13 @@ export default function BuildPage() {
       .trim();
   }
 
+async function notifyActivity(type, commentId) {
+    const {data:{session}} = await supabase.auth.getSession();
+    if (!session) return;
+    try { await fetch("/api/notifications/activity", {method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({type,postId:id,commentId})}); }
+    catch { /* The activity remains saved if notification delivery is unavailable. */ }
+  }
+
 async function handleLike() {
 if (!user) {
   alert("Sign in to like this build.");
@@ -175,10 +182,12 @@ if (!user) {
       .eq("post_id", id)
       .eq("user_id", user.id);
   } else {
-    await supabase.from("likes").insert({
+    const { error } = await supabase.from("likes").insert({
       post_id: id,
       user_id: user.id,
     });
+    if (error) { alert("Could not save your like. Please try again."); return; }
+    await notifyActivity("likes");
   }
 
   const { count } = await supabase
@@ -236,15 +245,16 @@ setLiked(!existingLike);
 
     if (!commentText.trim()) return;
 
-    const { error } = await supabase.from("comments").insert({
+    const { data: savedComment, error } = await supabase.from("comments").insert({
       post_id: id,
       user_id: user.id,
-      author: profile?.username ? `@${profile.username}` : user.email,
+      author: profile?.username ? `@${profile.username}` : "DGD member",
       author_email: user.email,
       content: commentText.trim(),
-    });
+    }).select("id").single();
 
     if (!error) {
+      await notifyActivity("comments", savedComment.id);
       setCommentText("");
       loadBuildPage();
     }

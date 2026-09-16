@@ -8,6 +8,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
 
 
 
@@ -20,9 +21,15 @@ export default function LoginPage() {
     }
 
     if (mode === "signup") {
+      const chosenUsername = username.trim().toLowerCase().replace(/^@/, "");
+      if (!/^[a-z0-9_]{3,30}$/.test(chosenUsername) || chosenUsername === email.split("@")[0].toLowerCase()) {
+        alert("Choose a username with 3–30 letters, numbers, or underscores. Do not use your email.");
+        return;
+      }
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: { data: { username: chosenUsername } },
       });
 
       if (error) {
@@ -30,12 +37,12 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.user) {
+      if (data.session && data.user) {
         await supabase.from("profiles").upsert([
           {
             id: data.user.id,
             email: data.user.email,
-            username: email.split("@")[0],
+            username: chosenUsername,
           },
         ]);
       }
@@ -92,6 +99,7 @@ export default function LoginPage() {
           Sign in to rate builds, comment, reply, and build your garage.
         </p>
 
+        {mode === "signup" && <input aria-label="Username" autoComplete="username" placeholder="Choose your public username" value={username} onChange={(e) => setUsername(e.target.value)} minLength={3} maxLength={30} required className="w-full bg-black border border-white/10 rounded-xl px-5 py-4 mb-4" />}
         <input
           type="email"
           placeholder="Email"

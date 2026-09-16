@@ -1,3 +1,4 @@
+import { paymentDatabase } from "@/lib/shop/supabase-server";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
@@ -93,7 +94,7 @@ export async function POST(request) {
       );
     }
 
-    const { error: preferenceError } = await supabase
+    const { error: preferenceError } = await paymentDatabase()
       .from("notification_preferences")
       .upsert(
         {
