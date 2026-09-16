@@ -6,10 +6,12 @@ import { Header } from "@/components/shop-finder/Finder";
 export default function Review() {
   const [shops, S] = useState<any[]>([]),
     [message, M] = useState("Loading review queue…");
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
   async function headers() {
     const {
       data: { session },
     } = await supabase.auth.getSession();
+    setSignedIn(Boolean(session));
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session?.access_token || ""}`,
@@ -49,7 +51,11 @@ export default function Review() {
       <main className="form-shell">
         <h1>Shop review</h1>
         <p>Check the business links and services before approving a listing.</p>
-        <p role="status">{message}</p><Inbox/>
+        {signedIn === false ? <div className="notice">
+          <p>Sign in with your DGD administrator account to review shop listings.</p>
+          <a className="primary" style={{display:"inline-flex",marginTop:16}} href="/login?next=%2Fshop-finder%2Freview">Sign in to review shops →</a>
+        </div> : <><p role="status">{message}</p><Inbox/></>}
+
         {shops.map((s) => (
           <article className="shop-card" key={s.id}>
             <div>
