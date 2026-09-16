@@ -76,7 +76,11 @@ export default function ShopForm({ dashboard = false }: { dashboard?: boolean })
         .then((headers) => fetch("/api/shop-finder/shops", { headers }))
         .then((r) => r.json())
         .then((x: any) => {
-          if (x.shops) MI(x.shops);
+          if (x.shops) {MI(x.shops);
+            const id=new URLSearchParams(window.location.search).get("edit");
+            const selected=x.shops.find((shop:any)=>shop.id===id);
+            if(selected&&!saved){D({...initial,...selected});L(null);PH([]);LU("");}
+          }
         })
         .catch(() => {});
   }, [signedIn, saved]);
@@ -187,8 +191,8 @@ export default function ShopForm({ dashboard = false }: { dashboard?: boolean })
             <CheckCircle2 size={42} color="#ff6900" />
             <h2 style={{ marginTop: 20 }}>You’re in the garage.</h2>
             <p style={{ margin: "15px 0" }}>{saved}</p>
-            <a href="/shop-finder" className="primary">
-              Back to Shop Finder
+            <a href="/shop-finder/dashboard" className="primary">
+              Go to my dashboard
             </a>
           </section>
         ) : (

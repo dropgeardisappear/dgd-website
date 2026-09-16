@@ -1,3 +1,3 @@
-import ShopForm from "@/components/shop-finder/ShopForm";
+import Dashboard from "@/components/shop-finder/Dashboard";
 export const metadata={title:"Shop Dashboard | DGD"};
-export default function Dashboard(){return <ShopForm dashboard/>;}
+export default function Page(){return <Dashboard/>;}
