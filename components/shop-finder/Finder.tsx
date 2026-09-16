@@ -156,12 +156,7 @@ export default function Home() {
       <Header />
       <main className="shell">
         <div className="intro">
-          <span className="eyebrow">LOCAL SHOPS. THE RIGHT KNOW-HOW.</span>
-          <h1>
-            Your ride.
-            <br />
-            <span>The right shop.</span>
-          </h1>
+          <h1>Local shops near you!</h1>
           <p>
             From everyday repairs to your next big build.
             <br />
