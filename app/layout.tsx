@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -26,11 +27,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-black text-white antialiased`}
-      >
-        <CartProvider>{children}</CartProvider>
-      </body>
+    <body
+  className={`${geistSans.variable} ${geistMono.variable}`}
+>
+  <CartProvider>{children}</CartProvider>
+  <Analytics />
+</body>
     </html>
   );
 }
