@@ -1,12 +1,15 @@
+import { userDatabase } from "@/lib/shop-finder/server";
 import { NextResponse } from "next/server";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import {
-  twilioClient,
-  verifyServiceSid,
+  getTwilioClient,
+  getVerifyServiceSid,
+  TwilioConfigurationError,
 } from "@/lib/twilio";
 
 export async function POST(request) {
   try {
+    if (!await userDatabase(request)) return NextResponse.json({error:"Sign in to verify your phone."},{status:401});
     const body = await request.json();
     const rawPhone = String(body.phone || "").trim();
 
@@ -27,6 +30,8 @@ export async function POST(request) {
     }
 
     const phoneNumber = parsedPhone.number;
+    const twilioClient = getTwilioClient();
+    const verifyServiceSid = getVerifyServiceSid();
 
     await twilioClient.verify.v2
       .services(verifyServiceSid)
@@ -42,6 +47,13 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error("Twilio send-code error:", error);
+
+    if (error instanceof TwilioConfigurationError) {
+      return NextResponse.json(
+        { error: "SMS verification is temporarily unavailable. Please try again later." },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json(
       {

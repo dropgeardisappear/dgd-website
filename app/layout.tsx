@@ -1,6 +1,10 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import UsernameSetup from "@/components/UsernameSetup";
+import { CartProvider } from "@/components/shop/CartProvider";
+import LivePresence from "@/components/LivePresence";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +19,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Drop Gear Disappear",
   description:
-    "A midnight garage community where the hardest trucks and cars get featured, rated, and remembered.",
+    "Underground builds. Community rated. Cars, trucks, motorcycles and the people building them.",
 };
 
 export default function RootLayout({
@@ -26,9 +30,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-black text-white antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable}`}
       >
-        {children}
+        <CartProvider>
+          <LivePresence />
+          {children}
+          <UsernameSetup />
+        </CartProvider>
+        <Analytics />
       </body>
     </html>
   );

@@ -1,5 +1,6 @@
 "use client";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import CartLink from "@/components/shop/CartLink";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -387,23 +388,26 @@ function Navbar({ user, garageUsername }: any) {
           />
         </a>
 
-        <div className="hidden gap-8 text-sm uppercase tracking-wider md:flex">
+        <div className="hidden items-center gap-6 text-sm uppercase tracking-wider lg:flex">
           <NavLinks user={user} garageUsername={garageUsername} />
         </div>
 
+        <div className="flex items-center gap-4">
+        <CartLink />
         <button
           type="button"
           onClick={() => setMenuOpen((open) => !open)}
           aria-expanded={menuOpen}
           aria-label="Toggle navigation"
-          className="rounded-xl border border-white/20 px-4 py-2 text-xl md:hidden"
+          className="rounded-xl border border-white/20 px-4 py-2 text-xl lg:hidden"
         >
           {menuOpen ? "×" : "☰"}
         </button>
+        </div>
       </div>
 
       {menuOpen && (
-        <div className="space-y-5 border-t border-white/10 bg-black px-4 py-6 text-sm uppercase tracking-wider md:hidden">
+        <div className="space-y-5 border-t border-white/10 bg-black px-4 py-6 text-sm uppercase tracking-wider lg:hidden">
           <MobileNavLinks
             user={user}
             garageUsername={garageUsername}
@@ -513,6 +517,15 @@ function NavLinks({ user, garageUsername }: any) {
         Top Rated
       </a>
 
+      <a href="/shop" className="text-orange-500 transition hover:text-white">Shop</a>
+
+      <a
+        href="/shop-finder"
+        className="transition hover:text-orange-500"
+      >
+        Shop Finder
+      </a>
+
       <a
         href="/submit"
         className="transition hover:text-orange-500"
@@ -554,6 +567,9 @@ function MobileNavLinks({ user, garageUsername, closeMenu }: any) {
         Top Rated
       </a>
 
+      <a onClick={closeMenu} href="/shop" className="block text-orange-500">Shop</a>
+
+      <a onClick={closeMenu} href="/shop-finder" className="block">Shop Finder</a>
       <a onClick={closeMenu} href="/submit" className="block">
         Submit Build
       </a>
@@ -788,6 +804,7 @@ function Footer({ user }: any) {
         </div>
 
         <div className="space-y-3">
+          <a href="/shop" className="block text-orange-500 hover:text-white">Shop DGD</a>
           <a href="/submit" className="block hover:text-white">
             Submit Build
           </a>

@@ -1,9 +1,11 @@
+import { paymentDatabase } from "@/lib/shop/supabase-server";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import {
-  twilioClient,
-  verifyServiceSid,
+  getTwilioClient,
+  getVerifyServiceSid,
+  TwilioConfigurationError,
 } from "@/lib/twilio";
 
 export async function POST(request) {
@@ -73,6 +75,8 @@ export async function POST(request) {
     }
 
     const phoneNumber = parsedPhone.number;
+    const twilioClient = getTwilioClient();
+    const verifyServiceSid = getVerifyServiceSid();
 
     const verificationCheck = await twilioClient.verify.v2
       .services(verifyServiceSid)
@@ -90,7 +94,7 @@ export async function POST(request) {
       );
     }
 
-    const { error: preferenceError } = await supabase
+    const { error: preferenceError } = await paymentDatabase()
       .from("notification_preferences")
       .upsert(
         {
@@ -127,6 +131,13 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error("Twilio verify-code error:", error);
+
+    if (error instanceof TwilioConfigurationError) {
+      return NextResponse.json(
+        { error: "SMS verification is temporarily unavailable. Please try again later." },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json(
       {
