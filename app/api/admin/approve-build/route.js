@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+import { paymentDatabase } from "@/lib/shop/supabase-server";
+import { createNotification } from "@/lib/notifications/createNotification";
+
 export const runtime = "nodejs";
 
 function requiredEnv(name) {
@@ -105,14 +108,19 @@ export async function POST(request) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      postId: data,
-      smsSent: false,
-      smsReason:
-        "Build approved. SMS notification was skipped.",
-      message: "Build approved successfully.",
-    });
+    let delivery = { smsSent: false, smsReason: "Build approved; notification could not be sent." };
+    try {
+      const admin = paymentDatabase();
+      const { data: post } = await admin.from("posts").select("user_id,created_by").eq("id", postId).single();
+      const recipient = post?.user_id || post?.created_by;
+      if (recipient) delivery = await createNotification({
+        supabaseAdmin: admin, userId: recipient, postId,
+        type: "build_approved", preferenceKey: "build_approved",
+        message: "Your build has been approved!", eventKey: `approved:${postId}`,
+        smsBody: `DGD: Your build is approved! https://www.dropgeardisappear.us/build/${postId} Reply STOP to unsubscribe.`,
+      });
+    } catch (error) { console.error("Build notification failed", error?.name); }
+    return NextResponse.json({ success: true, postId: data, smsSent: delivery.smsSent, smsReason: delivery.smsReason, message: "Build approved successfully." });
   } catch (error) {
     console.error("Approve-build route error:", error);
 

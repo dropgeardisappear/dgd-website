@@ -200,6 +200,18 @@ export default function NotificationSettingsPage() {
     }
   }
 
+  async function sendTest() {
+    setActionLoading("test"); setError(""); setMessage("");
+    try {
+      const token = await getAccessToken();
+      const response = await fetch("/api/sms/test", {method:"POST",headers:{Authorization:`Bearer ${token}`}});
+      const data = await readResponse(response);
+      if (!response.ok) throw new Error(data.error);
+      setMessage(data.message);
+    } catch (error) { setError(error.message || "Test text failed."); }
+    finally { setActionLoading(""); }
+  }
+
   async function savePreferences() {
     if (!user) {
       setError("You must be signed in to save preferences.");
@@ -377,6 +389,7 @@ export default function NotificationSettingsPage() {
 
         <div style={styles.card}>
           <h2 style={styles.cardTitle}>SMS Activity Notifications</h2>
+          {phoneVerified && <button type="button" onClick={sendTest} disabled={Boolean(actionLoading)} style={{padding:12,marginBottom:16,border:"1px solid #f97316",borderRadius:8}}>Send me a test text</button>}
 
           <PreferenceToggle
             label="Build approved"

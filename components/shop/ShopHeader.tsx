@@ -13,6 +13,7 @@ export default function ShopHeader() {
   const pathname = usePathname();
   const links = <>
     <Link href="/#culture" onClick={() => setOpen(false)}>Browse builds</Link>
+    <Link href="/shop-finder" onClick={() => setOpen(false)}>Shop Finder</Link>
     <Link href="/submit" onClick={() => setOpen(false)}>Submit build</Link>
     <Link href="/shop" aria-current={pathname === "/shop" ? "page" : undefined} onClick={() => setOpen(false)}>Shop</Link>
   </>;

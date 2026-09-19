@@ -520,6 +520,13 @@ function NavLinks({ user, garageUsername }: any) {
       <a href="/shop" className="text-orange-500 transition hover:text-white">Shop</a>
 
       <a
+        href="/shop-finder"
+        className="transition hover:text-orange-500"
+      >
+        Shop Finder
+      </a>
+
+      <a
         href="/submit"
         className="transition hover:text-orange-500"
       >
@@ -562,6 +569,7 @@ function MobileNavLinks({ user, garageUsername, closeMenu }: any) {
 
       <a onClick={closeMenu} href="/shop" className="block text-orange-500">Shop</a>
 
+      <a onClick={closeMenu} href="/shop-finder" className="block">Shop Finder</a>
       <a onClick={closeMenu} href="/submit" className="block">
         Submit Build
       </a>

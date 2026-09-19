@@ -183,7 +183,8 @@ export default function AdminPage() {
         <div className="w-full max-w-xl rounded-3xl border border-red-500/30 bg-zinc-950 p-8">
           <p className="text-xs font-black uppercase tracking-[0.3em] text-red-400">Access Error</p>
           <h1 className="mt-3 text-3xl font-black">Admin verification failed</h1>
-          <p className="mt-4 text-zinc-400">{accessError}</p>
+          <a href="/admin/live" className="ml-6 mt-4 inline-block text-orange-500 underline">Live analytics →</a>
+            <p className="mt-4 text-zinc-400">{accessError}</p>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
@@ -221,6 +222,7 @@ export default function AdminPage() {
             <a href="/admin/shop" className="ml-6 inline-block py-3 text-sm font-bold text-orange-400 hover:text-orange-300">Manage shop →</a>
             <p className="mt-8 text-xs font-black uppercase tracking-[0.35em] text-orange-500">DGD Moderation</p>
             <h1 className="mt-3 text-5xl font-black md:text-7xl">ADMIN APPROVAL</h1>
+            <a href="/shop-finder/review" className="mt-4 inline-block text-orange-500 underline">Shop Finder listings →</a>
             <p className="mt-4 text-zinc-400">
               Pending builds: <span className="font-bold text-white">{posts.length}</span>
             </p>

@@ -2,7 +2,7 @@ import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-
+import UsernameSetup from "@/components/UsernameSetup";
 import { CartProvider } from "@/components/shop/CartProvider";
 import LivePresence from "@/components/LivePresence";
 
@@ -34,10 +34,9 @@ export default function RootLayout({
       >
         <CartProvider>
           <LivePresence />
-
           {children}
+          <UsernameSetup />
         </CartProvider>
-
         <Analytics />
       </body>
     </html>

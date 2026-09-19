@@ -50,7 +50,7 @@ export default function SubmitPage() {
   const isMotorcycle = vehicleType === "Motorcycle";
   const owner = profile?.username
     ? `@${profile.username}`
-    : user?.email || "";
+    : "DGD member";
 
   const imagePreviews = useMemo(
     () => imageFiles.map((file) => URL.createObjectURL(file)),
